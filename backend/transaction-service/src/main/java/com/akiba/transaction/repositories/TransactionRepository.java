@@ -1,0 +1,209 @@
+package com.akiba.transaction.repositories;
+
+import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import io.vertx.sqlclient.Pool;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.Tuple;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class TransactionRepository {
+
+  private final Pool pool;
+
+  public TransactionRepository(Pool pool) {
+    this.pool = pool;
+  }
+
+  /**
+   * Inserts all transactions from a parsed batch in a single round-trip.
+   * Using a prepared statement in a loop is safe — Vert.x batches these efficiently.
+   */
+  public Future<Void> bulkInsert(String userId, JsonArray transactions) {
+    String sql = """
+                INSERT INTO transactions.records
+                    (user_id, date, amount, type, merchant, category, source, reference, raw_text, anomalous)
+                VALUES ($1, $2::timestamp, $3, $4, $5, $6, $7, $8, $9, $10)
+                """;
+
+    List<Tuple> batch = new ArrayList<>();
+    for (int i = 0; i < transactions.size(); i++) {
+      JsonObject tx = transactions.getJsonObject(i);
+      batch.add(Tuple.of(
+        UUID.fromString(userId),
+        tx.getString("date"),
+        tx.getDouble("amount"),
+        tx.getString("type"),
+        tx.getString("merchant"),
+        tx.getString("category"),
+        tx.getString("source"),
+        tx.getString("reference"),
+        tx.getString("rawText"),
+        tx.getBoolean("anomalous", false)
+      ));
+    }
+
+    return pool.preparedQuery(sql)
+      .executeBatch(batch)
+      .mapEmpty();
+  }
+
+  /**
+   * Paginated query with optional filters. All filters are AND-chained.
+   * Null filters are simply ignored — no dynamic SQL string concatenation needed
+   * because we build the WHERE clause with numbered placeholders upfront.
+   */
+  public Future<JsonArray> findAll(
+    String userId, int page, int size,
+    String category, String dateFrom, String dateTo,
+    String type, String source) {
+
+    String sql = """
+                SELECT id, date, amount, type, merchant, category, source, reference, anomalous, created_at
+                FROM transactions.records
+                WHERE user_id = $1
+                  AND ($2::varchar IS NULL OR category = $2)
+                  AND ($3::timestamp IS NULL OR date >= $3::timestamp)
+                  AND ($4::timestamp IS NULL OR date <= $4::timestamp)
+                  AND ($5::varchar IS NULL OR type = $5)
+                  AND ($6::varchar IS NULL OR source = $6)
+                ORDER BY date DESC
+                LIMIT $7 OFFSET $8
+                """;
+
+    Tuple params = Tuple.of(
+      UUID.fromString(userId),
+      category, dateFrom, dateTo, type, source,
+      size, page * size
+    );
+
+    return pool.preparedQuery(sql)
+      .execute(params)
+      .map(rows -> {
+        JsonArray result = new JsonArray();
+        for (Row row : rows) {
+          result.add(rowToJson(row));
+        }
+        return result;
+      });
+  }
+
+  public Future<JsonObject> findById(String userId, String transactionId) {
+    String sql = """
+                SELECT id, date, amount, type, merchant, category, source, reference, raw_text, anomalous, created_at
+                FROM transactions.records
+                WHERE id = $1 AND user_id = $2
+                """;
+
+    return pool.preparedQuery(sql)
+      .execute(Tuple.of(UUID.fromString(transactionId), UUID.fromString(userId)))
+      .map(rows -> {
+        if (!rows.iterator().hasNext()) return null;
+        return rowToJson(rows.iterator().next());
+      });
+  }
+
+  public Future<Void> updateCategory(String userId, String transactionId, String newCategory) {
+    String sql = """
+                UPDATE transactions.records
+                SET category = $1
+                WHERE id = $2 AND user_id = $3
+                """;
+
+    return pool.preparedQuery(sql)
+      .execute(Tuple.of(newCategory, UUID.fromString(transactionId), UUID.fromString(userId)))
+      .mapEmpty();
+  }
+
+  /**
+   * Summary: this month's income total, expense total, and top 5 categories by spend.
+   */
+  public Future<JsonObject> getSummary(String userId) {
+    String sql = """
+                SELECT
+                    SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END) AS total_income,
+                    SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END) AS total_expenses
+                FROM transactions.records
+                WHERE user_id = $1
+                  AND DATE_TRUNC('month', date) = DATE_TRUNC('month', NOW())
+                """;
+
+    String topCatSql = """
+                SELECT category, SUM(amount) AS total
+                FROM transactions.records
+                WHERE user_id = $1
+                  AND type = 'DEBIT'
+                  AND DATE_TRUNC('month', date) = DATE_TRUNC('month', NOW())
+                GROUP BY category
+                ORDER BY total DESC
+                LIMIT 5
+                """;
+
+    Tuple userTuple = Tuple.of(UUID.fromString(userId));
+
+    return pool.preparedQuery(sql).execute(userTuple)
+      .compose(totalsRows -> {
+        Row totals = totalsRows.iterator().next();
+        JsonObject summary = new JsonObject()
+          .put("totalIncome",   totals.getDouble("total_income"))
+          .put("totalExpenses", totals.getDouble("total_expenses"));
+
+        return pool.preparedQuery(topCatSql).execute(userTuple)
+          .map(catRows -> {
+            JsonArray topCategories = new JsonArray();
+            for (Row row : catRows) {
+              topCategories.add(new JsonObject()
+                .put("category", row.getString("category"))
+                .put("total",    row.getDouble("total")));
+            }
+            summary.put("topCategories", topCategories);
+            return summary;
+          });
+      });
+  }
+
+  public Future<JsonArray> getTopMerchants(String userId) {
+    String sql = """
+                SELECT merchant, SUM(amount) AS total, COUNT(*) AS tx_count
+                FROM transactions.records
+                WHERE user_id = $1
+                  AND type = 'DEBIT'
+                  AND DATE_TRUNC('month', date) = DATE_TRUNC('month', NOW())
+                GROUP BY merchant
+                ORDER BY total DESC
+                LIMIT 5
+                """;
+
+    return pool.preparedQuery(sql)
+      .execute(Tuple.of(UUID.fromString(userId)))
+      .map(rows -> {
+        JsonArray result = new JsonArray();
+        for (Row row : rows) {
+          result.add(new JsonObject()
+            .put("merchant", row.getString("merchant"))
+            .put("total",    row.getDouble("total"))
+            .put("txCount",  row.getInteger("tx_count")));
+        }
+        return result;
+      });
+  }
+
+  // Maps a database Row to a JsonObject — keeps all SQL column names in one place
+  private JsonObject rowToJson(Row row) {
+    return new JsonObject()
+      .put("id",         row.getUUID("id").toString())
+      .put("date",       row.getLocalDateTime("date").toString())
+      .put("amount",     row.getDouble("amount"))
+      .put("type",       row.getString("type"))
+      .put("merchant",   row.getString("merchant"))
+      .put("category",   row.getString("category"))
+      .put("source",     row.getString("source"))
+      .put("reference",  row.getString("reference"))
+      .put("anomalous",  row.getBoolean("anomalous"))
+      .put("createdAt",  row.getLocalDateTime("created_at").toString());
+  }
+}

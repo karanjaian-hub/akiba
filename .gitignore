@@ -1,0 +1,25 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+
+# Environment secrets — never commit these
+.env
+*.env
+
+# IntelliJ
+.idea/
+*.iml
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
