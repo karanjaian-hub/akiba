@@ -1,6 +1,6 @@
 package com.akiba.parsing_service;
 
-import com.akiba.parsing.MainVerticle;
+import com.akiba.parsing.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

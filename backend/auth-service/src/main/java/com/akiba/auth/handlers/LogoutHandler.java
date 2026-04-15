@@ -56,6 +56,7 @@ public class LogoutHandler {
   }
 
   private Future<Void> blacklistJti(String jti, int ttlSeconds) {
+    if (ttlSeconds <= 0) return Future.succeededFuture(); // token already expired, no need to blacklist
     String key = "blacklist:" + jti;
     return redis.setex(key, String.valueOf(ttlSeconds), "revoked").mapEmpty();
   }

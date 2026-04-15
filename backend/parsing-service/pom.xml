@@ -19,7 +19,7 @@
     <vertx.version>5.0.10</vertx.version>
     <junit-jupiter.version>5.9.1</junit-jupiter.version>
 
-    <main.verticle>com.akiba.parsing.MainVerticle</main.verticle>
+    <main.verticle>com.akiba.parsing.verticles.MainVerticle</main.verticle>
     <launcher.class>io.vertx.launcher.application.VertxApplication</launcher.class>
   </properties>
 

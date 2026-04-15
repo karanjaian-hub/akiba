@@ -6,15 +6,6 @@ import io.vertx.rabbitmq.RabbitMQClient;
 
 import java.util.UUID;
 
-/**
- * Handles direct HTTP parse requests from the mobile app (via api-gateway).
- *
- * These endpoints don't parse synchronously — they enqueue a job on
- * RabbitMQ and return a jobId immediately. The mobile app can poll
- * GET /parse/status/:jobId if needed.
- *
- * This pattern means a slow Gemini response never times out the HTTP request.
- */
 public class ParseHandler {
 
   private final RabbitMQClient rabbitMQ;
@@ -23,10 +14,6 @@ public class ParseHandler {
     this.rabbitMQ = rabbitMQ;
   }
 
-  /**
-   * POST /parse/mpesa
-   * Body: { "smsText": "raw pasted SMS content" }
-   */
   public void handleMpesaParse(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject();
     if (body == null || body.getString("smsText", "").isBlank()) {

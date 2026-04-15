@@ -19,8 +19,6 @@ import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.RedisAPI;
 import io.vertx.redis.client.RedisOptions;
 
-// API Gateway — single entry point for all mobile requests.
-// Handles JWT verification, RBAC, rate limiting, and proxying
 
 public class MainVerticle extends AbstractVerticle {
 

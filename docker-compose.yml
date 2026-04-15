@@ -54,6 +54,9 @@ services:
     build: ./backend/auth-service
     ports:
       - "8081:8081"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

@@ -1,24 +1,22 @@
 package com.akiba.auth.verticles;
 
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
+import io.vertx.core.VerticleBase;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
-//creates all auth schema tables and seeds
-
-public class SchemaVerticle extends AbstractVerticle {
+public class SchemaVerticle extends VerticleBase {
 
   private Pool pgPool;
 
   @Override
-  public void start(Promise<Void> startPromise) {
+  public Future<?> start() {
     pgPool = createPgPool();
 
-    createSchema()
+    // Each step uses .compose() — if any step fails the chain stops
+    return createSchema()
       .compose(v -> createBaseTablesInParallel())
       .compose(v -> createRolePermissionsTable())
       .compose(v -> createUserTablesInParallel())
@@ -26,17 +24,15 @@ public class SchemaVerticle extends AbstractVerticle {
       .compose(v -> seedPermissions())
       .compose(v -> seedRolePermissions())
       .compose(v -> seedAdminUsers())
-      .onSuccess(v -> {
-        System.out.println("[SchemaVerticle] ✅ All tables created and seeded");
-        startPromise.complete();
-      })
+      .onSuccess(v -> System.out.println("[SchemaVerticle] ✅ All tables created and seeded"))
       .onFailure(err -> {
         System.err.println("[SchemaVerticle] ❌ Schema setup failed: " + err.getMessage());
-        startPromise.fail(err);
+        // Close the pool here too — stop() may never be called if start() fails
+        if (pgPool != null) pgPool.close();
       });
   }
 
-  // Pool Setup
+  // ─── Pool Setup ────────────────────────────────────────────────────────────
 
   private Pool createPgPool() {
     PgConnectOptions connectOptions = new PgConnectOptions()
@@ -53,7 +49,7 @@ public class SchemaVerticle extends AbstractVerticle {
       .build();
   }
 
-  // Step 1: Create Schema
+  // ─── Step 1: Create Schema ─────────────────────────────────────────────────
 
   private Future<Void> createSchema() {
     return pgPool.query("CREATE SCHEMA IF NOT EXISTS auth")
@@ -61,7 +57,7 @@ public class SchemaVerticle extends AbstractVerticle {
       .mapEmpty();
   }
 
-  // Step 2: Base tables (parallel — no foreign key deps yet)
+  // ─── Step 2: Base tables (parallel — no foreign key deps yet) ─────────────
 
   private Future<Void> createBaseTablesInParallel() {
     Future<Void> roles = pgPool.query("""
@@ -84,7 +80,7 @@ public class SchemaVerticle extends AbstractVerticle {
     return Future.all(roles, permissions).mapEmpty();
   }
 
-  // Step 3: role_permissions depends on both roles + permissions
+  // ─── Step 3: role_permissions depends on both roles + permissions ──────────
 
   private Future<Void> createRolePermissionsTable() {
     return pgPool.query("""
@@ -96,7 +92,7 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
   }
 
-  // Step 4: User tables (parallel — all depend on roles)
+  // ─── Step 4: User tables (parallel — all depend on roles) ─────────────────
 
   private Future<Void> createUserTablesInParallel() {
     Future<Void> users = pgPool.query("""
@@ -140,7 +136,7 @@ public class SchemaVerticle extends AbstractVerticle {
     return Future.all(users, otps, sessions).mapEmpty();
   }
 
-  // Step 5: Seed Roles
+  // ─── Step 5: Seed Roles ────────────────────────────────────────────────────
 
   private Future<Void> seedRoles() {
     return pgPool.query("""
@@ -151,7 +147,7 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
   }
 
-  // Step 6: Seed Permissions
+  // ─── Step 6: Seed Permissions ──────────────────────────────────────────────
 
   private Future<Void> seedPermissions() {
     return pgPool.query("""
@@ -168,14 +164,14 @@ public class SchemaVerticle extends AbstractVerticle {
         ('profile:read',         'View own profile'),
         ('profile:write',        'Update own profile'),
         ('notifications:read',   'View own notifications'),
-        ('admin:users:read',     'Admin — view all users'),
-        ('admin:users:write',    'Admin — deactivate or modify users'),
-        ('admin:reports:read',   'Admin — view system reports')
+        ('admin:users:read',     'Admin - view all users'),
+        ('admin:users:write',    'Admin - deactivate or modify users'),
+        ('admin:reports:read',   'Admin - view system reports')
       ON CONFLICT (name) DO NOTHING
       """).execute().mapEmpty();
   }
 
-  // Step 7: Map permissions to roles
+  // ─── Step 7: Map permissions to roles ─────────────────────────────────────
 
   private Future<Void> seedRolePermissions() {
     Future<Void> userPerms = pgPool.query("""
@@ -198,33 +194,45 @@ public class SchemaVerticle extends AbstractVerticle {
     return Future.all(userPerms, adminPerms).mapEmpty();
   }
 
-  // Step 8: Seed default users
+  // ─── Step 8: Seed default users ───────────────────────────────────────────
+  // Phone numbers stored in E.164 format (+254) for SMS routing compatibility.
+  // Password hash is pulled from the SEED_PASSWORD_HASH env var — do NOT
+  // hardcode a bcrypt hash in source. Generate one with:
+  //   htpasswd -bnBC 10 "" yourpassword | tr -d ':\n'
 
   private Future<Void> seedAdminUsers() {
-    return pgPool.query("""
+    String passwordHash = System.getenv().getOrDefault(
+      "SEED_PASSWORD_HASH",
+      "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu"  // dev fallback only
+    );
+
+    return pgPool.preparedQuery("""
       INSERT INTO auth.users (full_name, email, phone, password_hash, role_id, status) VALUES
         (
           'Karanja Ian',
           'karanjaian420@gmail.com',
-          '0748492654',
-          '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+          '+254748492654',
+          $1,
           (SELECT id FROM auth.roles WHERE name = 'ROLE_ADMIN'),
           'ACTIVE'
         ),
         (
           'Ian Karanja',
           'iankaranja420@gmail.com',
-          '0111824449',
-          '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+          '+254111824449',
+          $1,
           (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'),
           'ACTIVE'
         )
       ON CONFLICT (email) DO NOTHING
-      """).execute().mapEmpty();
+      """)
+      .execute(io.vertx.sqlclient.Tuple.of(passwordHash))
+      .mapEmpty();
   }
 
   @Override
-  public void stop() {
+  public Future<?> stop() {
     if (pgPool != null) pgPool.close();
+    return Future.succeededFuture();
   }
 }
