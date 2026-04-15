@@ -7,9 +7,6 @@ import io.vertx.redis.client.RedisAPI;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Tuple;
 
-/**
- * Handles POST /auth/logout
- */
 public class LogoutHandler {
 
   private final Pool pgPool;

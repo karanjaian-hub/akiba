@@ -1,7 +1,6 @@
-package com.akiba.auth;
+package com.akiba.auth.verticles;
 
 import com.akiba.auth.handlers.*;
-import com.akiba.auth.verticles.SchemaVerticle;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -21,11 +20,7 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.ext.web.client.WebClient;
 
-/**
- * Entry point for the auth-service.
- * Boot order: SchemaVerticle → DB pool → Redis → Router → HTTP server.
- * Each step uses Future.compose() so a failure at any step stops the chain.
- */
+
 public class MainVerticle extends AbstractVerticle {
 
   private Pool pgPool;
@@ -49,13 +44,13 @@ public class MainVerticle extends AbstractVerticle {
       });
   }
 
-  // ─── Step 1: Deploy Schema ────────────────────────────────────────────────
+  // Step 1: Deploy Schema
 
   private Future<Void> deploySchemaVerticle() {
     return vertx.deployVerticle(new SchemaVerticle()).mapEmpty();
   }
 
-  // ─── Step 2: Postgres Pool ────────────────────────────────────────────────
+  // Step 2: Postgres Pool
 
   private Future<Void> connectPostgres() {
     PgConnectOptions connectOptions = new PgConnectOptions()
@@ -74,7 +69,7 @@ public class MainVerticle extends AbstractVerticle {
     return Future.succeededFuture();
   }
 
-  // ─── Step 3: Redis ────────────────────────────────────────────────────────
+  // Step 3: Redis
 
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
@@ -92,7 +87,7 @@ public class MainVerticle extends AbstractVerticle {
       });
   }
 
-  // ─── Step 4: HTTP Server & Router ─────────────────────────────────────────
+  // Step 4: HTTP Server & Router
 
   private Future<Void> startHttpServer() {
     Router router = buildRouter();
@@ -118,7 +113,7 @@ public class MainVerticle extends AbstractVerticle {
     router.route().handler(BodyHandler.create());
 
     // ─── Handlers ─────────────────────────────────────────────────────────
-    RegisterHandler     registerHandler     = new RegisterHandler(pgPool, redis, webClient);
+    RegisterHandler registerHandler = new RegisterHandler(pgPool, redis, vertx, webClient);
     VerifyPhoneHandler  verifyPhoneHandler  = new VerifyPhoneHandler(pgPool, redis);
     VerifyEmailHandler  verifyEmailHandler  = new VerifyEmailHandler(pgPool);
     LoginHandler        loginHandler        = new LoginHandler(pgPool, redis, jwtAuth);

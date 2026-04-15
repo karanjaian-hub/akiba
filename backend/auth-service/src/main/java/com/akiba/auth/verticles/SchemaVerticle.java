@@ -8,11 +8,8 @@ import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
-/**
- * Runs once on startup — creates all auth schema tables and seeds
- * roles + permissions. Every statement uses IF NOT EXISTS so this
- * is safe to re-run after a restart without duplicating data.
- */
+//creates all auth schema tables and seeds
+
 public class SchemaVerticle extends AbstractVerticle {
 
   private Pool pgPool;
@@ -28,6 +25,7 @@ public class SchemaVerticle extends AbstractVerticle {
       .compose(v -> seedRoles())
       .compose(v -> seedPermissions())
       .compose(v -> seedRolePermissions())
+      .compose(v -> seedAdminUsers())
       .onSuccess(v -> {
         System.out.println("[SchemaVerticle] ✅ All tables created and seeded");
         startPromise.complete();
@@ -38,7 +36,7 @@ public class SchemaVerticle extends AbstractVerticle {
       });
   }
 
-  // ─── Pool Setup ────────────────────────────────────────────────────────────
+  // Pool Setup
 
   private Pool createPgPool() {
     PgConnectOptions connectOptions = new PgConnectOptions()
@@ -55,7 +53,7 @@ public class SchemaVerticle extends AbstractVerticle {
       .build();
   }
 
-  // ─── Step 1: Create Schema ─────────────────────────────────────────────────
+  // Step 1: Create Schema
 
   private Future<Void> createSchema() {
     return pgPool.query("CREATE SCHEMA IF NOT EXISTS auth")
@@ -63,7 +61,7 @@ public class SchemaVerticle extends AbstractVerticle {
       .mapEmpty();
   }
 
-  // ─── Step 2: Base tables (parallel — no foreign key deps yet) ─────────────
+  // Step 2: Base tables (parallel — no foreign key deps yet)
 
   private Future<Void> createBaseTablesInParallel() {
     Future<Void> roles = pgPool.query("""
@@ -86,7 +84,7 @@ public class SchemaVerticle extends AbstractVerticle {
     return Future.all(roles, permissions).mapEmpty();
   }
 
-  // ─── Step 3: role_permissions depends on both roles + permissions ──────────
+  // Step 3: role_permissions depends on both roles + permissions
 
   private Future<Void> createRolePermissionsTable() {
     return pgPool.query("""
@@ -98,7 +96,7 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
   }
 
-  // ─── Step 4: User tables (parallel — all depend on roles) ─────────────────
+  // Step 4: User tables (parallel — all depend on roles)
 
   private Future<Void> createUserTablesInParallel() {
     Future<Void> users = pgPool.query("""
@@ -142,7 +140,7 @@ public class SchemaVerticle extends AbstractVerticle {
     return Future.all(users, otps, sessions).mapEmpty();
   }
 
-  // ─── Step 5: Seed Roles ────────────────────────────────────────────────────
+  // Step 5: Seed Roles
 
   private Future<Void> seedRoles() {
     return pgPool.query("""
@@ -153,7 +151,7 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
   }
 
-  // ─── Step 6: Seed Permissions ──────────────────────────────────────────────
+  // Step 6: Seed Permissions
 
   private Future<Void> seedPermissions() {
     return pgPool.query("""
@@ -177,10 +175,9 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
   }
 
-  // ─── Step 7: Map permissions to roles ─────────────────────────────────────
+  // Step 7: Map permissions to roles
 
   private Future<Void> seedRolePermissions() {
-    // ROLE_USER gets all non-admin permissions
     Future<Void> userPerms = pgPool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
         SELECT r.id, p.id
@@ -190,7 +187,6 @@ public class SchemaVerticle extends AbstractVerticle {
       ON CONFLICT DO NOTHING
       """).execute().mapEmpty();
 
-    // ROLE_ADMIN gets all permissions
     Future<Void> adminPerms = pgPool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
         SELECT r.id, p.id
@@ -200,6 +196,31 @@ public class SchemaVerticle extends AbstractVerticle {
       """).execute().mapEmpty();
 
     return Future.all(userPerms, adminPerms).mapEmpty();
+  }
+
+  // Step 8: Seed default users
+
+  private Future<Void> seedAdminUsers() {
+    return pgPool.query("""
+      INSERT INTO auth.users (full_name, email, phone, password_hash, role_id, status) VALUES
+        (
+          'Karanja Ian',
+          'karanjaian420@gmail.com',
+          '0748492654',
+          '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+          (SELECT id FROM auth.roles WHERE name = 'ROLE_ADMIN'),
+          'ACTIVE'
+        ),
+        (
+          'Ian Karanja',
+          'iankaranja420@gmail.com',
+          '0111824449',
+          '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+          (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'),
+          'ACTIVE'
+        )
+      ON CONFLICT (email) DO NOTHING
+      """).execute().mapEmpty();
   }
 
   @Override

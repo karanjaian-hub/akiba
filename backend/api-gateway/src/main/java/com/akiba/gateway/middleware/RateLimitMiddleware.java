@@ -1,4 +1,4 @@
-package com.akiba.api_gateway.middleware;
+package com.akiba.gateway.middleware;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
@@ -6,11 +6,9 @@ import io.vertx.redis.client.RedisAPI;
 
 import java.util.List;
 
-/**
- * Redis-backed rate limiter for payment routes.
- * Allows max 5 payment requests per user per minute.
- * Uses Redis INCR + EXPIRE so the counter resets automatically.
- */
+// Redis-backed rate limiter for payment routes.
+// Allows max 5 payment requests per user per minute.
+
 public class RateLimitMiddleware {
 
   private final RedisAPI redis;

@@ -58,11 +58,15 @@ public class ReportGenerationConsumer {
    * Registers the queue consumer. Call this once from the main verticle's start().
    */
   public Future<Void> start() {
-    return rabbitMQ.basicConsumer(QUEUE_IN).compose(consumer -> {
-      consumer.handler(this::handleMessage);
-      log.info("Listening on RabbitMQ queue: {}", QUEUE_IN);
-      return Future.succeededFuture();
-    });
+    return rabbitMQ.start()
+      .compose(v -> rabbitMQ.queueDeclare(QUEUE_IN, true, false, false))
+      .compose(v -> rabbitMQ.queueDeclare(QUEUE_NOTIFY, true, false, false))
+      .compose(v -> rabbitMQ.basicConsumer(QUEUE_IN))
+      .compose(consumer -> {
+        consumer.handler(this::handleMessage);
+        log.info("Listening on RabbitMQ queue: {}", QUEUE_IN);
+        return Future.succeededFuture();
+      });
   }
 
   private void handleMessage(RabbitMQMessage message) {

@@ -15,9 +15,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
-/**
- * Handles POST /auth/refresh
- */
 public class RefreshTokenHandler {
 
   private final Pool pgPool;

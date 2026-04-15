@@ -12,20 +12,19 @@ import io.vertx.sqlclient.Tuple;
 import java.security.SecureRandom;
 import java.util.UUID;
 
-/**
- * Handles POST /auth/register
- */
 public class RegisterHandler {
 
   private final Pool pgPool;
   private final RedisAPI redis;
+  private final io.vertx.core.Vertx vertx;
   private final WebClient webClient;
 
   private static final int OTP_TTL_SECONDS = 300;
 
-  public RegisterHandler(Pool pgPool, RedisAPI redis, WebClient webClient) {
+  public RegisterHandler(Pool pgPool, RedisAPI redis, io.vertx.core.Vertx vertx, WebClient webClient) {
     this.pgPool = pgPool;
     this.redis = redis;
+    this.vertx = vertx;
     this.webClient = webClient;
   }
 
@@ -47,13 +46,19 @@ public class RegisterHandler {
       return;
     }
 
+    String normalizedPhone = normalizePhone(phone);
+    if (normalizedPhone == null) {
+      rejectWith(ctx, 400, "Invalid phone number format. Use 07XXXXXXXX or +2547XXXXXXXX");
+      return;
+    }
+
     String passwordHash = BCrypt.withDefaults().hashToString(12, password.toCharArray());
     String userId       = UUID.randomUUID().toString();
     String otp          = generateOtp();
 
-    saveUser(userId, fullName, email, phone, passwordHash)
+    saveUser(userId, fullName, email, normalizedPhone, passwordHash)
       .compose(v -> storeOtpInRedis(userId, otp))
-      .compose(v -> sendOtpSms(phone, otp))
+      .compose(v -> sendOtpSms(normalizedPhone, otp))
       .compose(v -> sendVerificationEmail(userId, email, fullName))
       .onSuccess(v -> ctx.response()
         .setStatusCode(201)
@@ -63,7 +68,8 @@ public class RegisterHandler {
           .put("userId", userId)
           .encode()))
       .onFailure(err -> {
-        System.err.println("[RegisterHandler] ❌ " + err.getMessage());
+        err.printStackTrace();
+        System.err.println("[RegisterHandler] ❌ " + err.getClass().getSimpleName() + ": " + err.getMessage());
         rejectWith(ctx, 500, "Registration failed. Please try again.");
       });
   }
@@ -89,23 +95,59 @@ public class RegisterHandler {
     String apiKey   = System.getenv("AT_API_KEY");
     String username = System.getenv("AT_USERNAME");
 
-    return webClient.postAbs("https://api.sandbox.africastalking.com/version1/messaging")
-      .putHeader("apiKey", apiKey)
-      .putHeader("Accept", "application/json")
-      .sendForm(io.vertx.core.MultiMap.caseInsensitiveMultiMap()
-        .add("username", username)
-        .add("to", phone)
-        .add("message", "Your Akiba verification code is: " + otp + ". Expires in 5 minutes."))
-      .mapEmpty();
+    if (apiKey == null || apiKey.isBlank()) {
+      System.err.println("[RegisterHandler] ❌ AT_API_KEY environment variable is not set");
+      return Future.failedFuture("SMS service misconfigured: AT_API_KEY is missing");
+    }
+    if (username == null || username.isBlank()) {
+      System.err.println("[RegisterHandler] ❌ AT_USERNAME environment variable is not set");
+      return Future.failedFuture("SMS service misconfigured: AT_USERNAME is missing");
+    }
+
+    return vertx.executeBlocking(() -> {
+      ProcessBuilder pb = new ProcessBuilder(
+        "curl", "-s", "-k", "-X", "POST",
+        "https://api.sandbox.africastalking.com/version1/messaging",
+        "-H", "apiKey: " + apiKey,
+        "-H", "Accept: application/json",
+        "-H", "Content-Type: application/x-www-form-urlencoded",
+        "-d", "username=" + username + "&to=" + phone + "&message=Your+Akiba+code+is+" + otp
+      );
+      pb.redirectErrorStream(true);
+      Process process = pb.start();
+      String response = new String(process.getInputStream().readAllBytes());
+      int exitCode = process.waitFor();
+      System.out.println("[RegisterHandler] AT response: " + response);
+      if (exitCode != 0 || response.contains("error")) {
+        throw new RuntimeException("SMS failed: " + response);
+      }
+      System.out.println("[RegisterHandler] ✅ OTP SMS sent to " + phone);
+      return null;
+    });
   }
 
   private Future<Void> sendVerificationEmail(String userId, String email, String fullName) {
-    System.out.println("[RegisterHandler] 📧 Email verification link → userId=" + userId);
+    System.out.println("[RegisterHandler] 📧 Email verification link → userId=" + userId + ", email=" + email);
     return Future.succeededFuture();
   }
 
   private String generateOtp() {
     return String.format("%06d", new SecureRandom().nextInt(999999));
+  }
+
+  private String normalizePhone(String phone) {
+    if (phone == null) return null;
+    phone = phone.trim().replaceAll("\\s+", "");
+    if (phone.matches("^0[17]\\d{8}$")) {
+      return "+254" + phone.substring(1);
+    }
+    if (phone.matches("^\\+254[17]\\d{8}$")) {
+      return phone;
+    }
+    if (phone.matches("^254[17]\\d{8}$")) {
+      return "+" + phone;
+    }
+    return null;
   }
 
   private boolean isValidInput(String... fields) {

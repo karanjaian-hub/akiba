@@ -8,6 +8,7 @@ import com.akiba.ai.services.AiService;
 import com.akiba.ai.services.FinancialContextService;
 import com.akiba.ai.services.ReportGenerationConsumer;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
@@ -31,11 +32,12 @@ import org.slf4j.LoggerFactory;
  * It does NOT contain any business logic — that belongs in the service layer.
  *
  * Startup order:
- *   1. Connect to Postgres, Redis, RabbitMQ.
- *   2. Build all service / handler instances (dependency injection by hand).
- *   3. Register HTTP routes.
- *   4. Start RabbitMQ consumer.
- *   5. Open the HTTP server.
+ *   1. Connect to Redis (async — must complete before proceeding).
+ *   2. Connect to Postgres, RabbitMQ.
+ *   3. Build all service / handler instances (dependency injection by hand).
+ *   4. Register HTTP routes.
+ *   5. Start RabbitMQ consumer.
+ *   6. Open the HTTP server.
  */
 public class MainVerticle extends AbstractVerticle {
 
@@ -52,40 +54,45 @@ public class MainVerticle extends AbstractVerticle {
     }
 
     Pool           pool      = buildPool();
-    RedisAPI       redis     = buildRedis();
     RabbitMQClient rabbitMQ  = buildRabbitMQ();
     WebClient      webClient = WebClient.create(vertx);
 
-    // ── Build dependency graph ────────────────────────────────────────────
-    GeminiProvider          gemini    = new GeminiProvider(webClient, geminiKey);
-    AiCacheService          cache     = new AiCacheService(redis);
-    FinancialContextService context   = new FinancialContextService(webClient);
-    AiRepository            repo      = new AiRepository(pool);
-    AiService               aiService = new AiService(gemini, cache, context, repo);
-    AiHandler               handler   = new AiHandler(aiService);
-    ReportGenerationConsumer consumer = new ReportGenerationConsumer(rabbitMQ, gemini, repo, webClient);
+    // Connect Redis first — everything else depends on it being ready
+    buildRedis()
+      .onFailure(startPromise::fail)
+      .onSuccess(redis -> {
 
-    // ── Wire HTTP routes ──────────────────────────────────────────────────
-    Router router = Router.router(vertx);
-    router.route().handler(BodyHandler.create());
+        // ── Build dependency graph ──────────────────────────────────────
+        GeminiProvider           gemini    = new GeminiProvider(webClient, geminiKey);
+        AiCacheService           cache     = new AiCacheService(redis);
+        FinancialContextService  context   = new FinancialContextService(webClient);
+        AiRepository             repo      = new AiRepository(pool);
+        AiService                aiService = new AiService(gemini, cache, context, repo);
+        AiHandler                handler   = new AiHandler(aiService);
+        ReportGenerationConsumer consumer  = new ReportGenerationConsumer(rabbitMQ, gemini, repo, webClient);
 
-    router.post("/ai/chat")                .handler(handler::chat);
-    router.get("/ai/conversations")        .handler(handler::getConversations);
-    router.get("/ai/reports/:month/:year") .handler(handler::getReport);
-    router.post("/ai/insights")            .handler(handler::quickInsight);
-    router.get("/health")                  .handler(ctx -> ctx.response().end("OK"));
+        // ── Wire HTTP routes ────────────────────────────────────────────
+        Router router = Router.router(vertx);
+        router.route().handler(BodyHandler.create());
 
-    // ── Start consumer then HTTP server ───────────────────────────────────
-    consumer.start()
-      .compose(v -> vertx.createHttpServer()
-        .requestHandler(router)
-        .listen(port)
-      )
-      .onSuccess(server -> {
-        log.info("AI Service started on port {}", port);
-        startPromise.complete();
-      })
-      .onFailure(startPromise::fail);
+        router.post("/ai/chat")                .handler(handler::chat);
+        router.get("/ai/conversations")        .handler(handler::getConversations);
+        router.get("/ai/reports/:month/:year") .handler(handler::getReport);
+        router.post("/ai/insights")            .handler(handler::quickInsight);
+        router.get("/health")                  .handler(ctx -> ctx.response().end("OK"));
+
+        // ── Start consumer then HTTP server ─────────────────────────────
+        consumer.start()
+          .compose(v -> vertx.createHttpServer()
+            .requestHandler(router)
+            .listen(port)
+          )
+          .onSuccess(server -> {
+            log.info("AI Service started on port {}", port);
+            startPromise.complete();
+          })
+          .onFailure(startPromise::fail);
+      });
   }
 
   private Pool buildPool() {
@@ -103,11 +110,11 @@ public class MainVerticle extends AbstractVerticle {
       .build();
   }
 
-  private RedisAPI buildRedis() {
+  private Future<RedisAPI> buildRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "redis");
-    Redis  redis     = Redis.createClient(vertx, new RedisOptions()
+    Redis redis = Redis.createClient(vertx, new RedisOptions()
       .setConnectionString("redis://" + redisHost + ":6379"));
-    return RedisAPI.api(redis);
+    return redis.connect().map(conn -> RedisAPI.api(redis));
   }
 
   private RabbitMQClient buildRabbitMQ() {

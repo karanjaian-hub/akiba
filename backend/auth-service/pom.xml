@@ -16,7 +16,7 @@
     <exec-maven-plugin.version>3.0.0</exec-maven-plugin.version>
     <vertx.version>5.0.10</vertx.version>
     <junit-jupiter.version>5.9.1</junit-jupiter.version>
-    <main.verticle>com.akiba.auth.MainVerticle</main.verticle>
+    <main.verticle>com.akiba.auth.verticles.MainVerticle</main.verticle>
     <launcher.class>io.vertx.launcher.application.VertxApplication</launcher.class>
   </properties>
 
@@ -33,7 +33,7 @@
   </dependencyManagement>
 
   <dependencies>
-    <!-- Vert.x Core -->
+
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-launcher-application</artifactId>
@@ -47,13 +47,11 @@
       <artifactId>vertx-web-client</artifactId>
     </dependency>
 
-    <!-- Auth -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-auth-jwt</artifactId>
     </dependency>
 
-    <!-- Database -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-pg-client</artifactId>
@@ -63,25 +61,21 @@
       <artifactId>vertx-sql-client-templates</artifactId>
     </dependency>
 
-    <!-- Redis -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-redis-client</artifactId>
     </dependency>
 
-    <!-- RabbitMQ -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-rabbitmq-client</artifactId>
     </dependency>
 
-    <!-- Email -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-mail-client</artifactId>
     </dependency>
 
-    <!-- BCrypt for password hashing -->
     <dependency>
       <groupId>at.favre.lib</groupId>
       <artifactId>bcrypt</artifactId>

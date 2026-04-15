@@ -1,4 +1,4 @@
-package com.akiba.api_gateway.middleware;
+package com.akiba.gateway.middleware;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.jwt.JWTAuth;
@@ -6,11 +6,10 @@ import io.vertx.ext.auth.authentication.TokenCredentials;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.redis.client.RedisAPI;
 
-/**
- * Verifies JWT on every protected route.
- * Checks the Redis blacklist for revoked tokens (logout).
- * Attaches userId, role, and jti to RoutingContext for downstream handlers.
- */
+// Verifies JWT on every protected route.
+// Checks the Redis blacklist for revoked tokens (logout).
+// Attaches userId, role, and jti to RoutingContext for downstream handlers.
+
 public class JwtMiddleware {
 
   private final JWTAuth jwtAuth;

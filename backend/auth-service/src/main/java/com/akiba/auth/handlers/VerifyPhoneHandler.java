@@ -10,9 +10,6 @@ import io.vertx.sqlclient.Tuple;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Handles POST /auth/verify-phone
- */
 public class VerifyPhoneHandler {
 
   private final Pool pgPool;

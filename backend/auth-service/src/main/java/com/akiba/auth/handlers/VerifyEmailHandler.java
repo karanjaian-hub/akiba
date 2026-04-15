@@ -8,9 +8,6 @@ import io.vertx.sqlclient.Tuple;
 
 import java.util.UUID;
 
-/**
- * Handles POST /auth/verify-email
- */
 public class VerifyEmailHandler {
 
   private final Pool pgPool;

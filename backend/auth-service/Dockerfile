@@ -9,6 +9,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache ca-certificates curl && update-ca-certificates
 
 WORKDIR /app
 

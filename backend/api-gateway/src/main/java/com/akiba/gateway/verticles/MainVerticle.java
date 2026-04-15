@@ -1,8 +1,8 @@
-package com.akiba.api_gateway;
+package com.akiba.gateway.verticles;
 
-import com.akiba.api_gateway.middleware.JwtMiddleware;
-import com.akiba.api_gateway.middleware.RbacMiddleware;
-import com.akiba.api_gateway.middleware.RateLimitMiddleware;
+import com.akiba.gateway.middleware.JwtMiddleware;
+import com.akiba.gateway.middleware.RateLimitMiddleware;
+import com.akiba.gateway.middleware.RbacMiddleware;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -19,11 +19,9 @@ import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.RedisAPI;
 import io.vertx.redis.client.RedisOptions;
 
-/**
- * API Gateway — single entry point for all mobile requests.
- * Handles JWT verification, RBAC, rate limiting, and proxying
- * to downstream microservices.
- */
+// API Gateway — single entry point for all mobile requests.
+// Handles JWT verification, RBAC, rate limiting, and proxying
+
 public class MainVerticle extends AbstractVerticle {
 
   private RedisAPI redis;
@@ -75,8 +73,8 @@ public class MainVerticle extends AbstractVerticle {
     Router router = Router.router(vertx);
 
     // Middleware instances
-    JwtMiddleware       jwtMiddleware       = new JwtMiddleware(jwtAuth, redis);
-    RbacMiddleware      rbacMiddleware      = new RbacMiddleware();
+    JwtMiddleware jwtMiddleware       = new JwtMiddleware(jwtAuth, redis);
+    RbacMiddleware rbacMiddleware      = new RbacMiddleware();
     RateLimitMiddleware rateLimitMiddleware = new RateLimitMiddleware(redis);
 
     // CORS for React Native

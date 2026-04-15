@@ -1,15 +1,14 @@
-package com.akiba.api_gateway.middleware;
+package com.akiba.gateway.middleware;
 
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
-/**
- * Checks that the authenticated user has the required permission
- * for the route. Call requirePermission("payments:send") in the router
- * to protect a specific route.
- */
+// Checks that the authenticated user has the required permission
+// for the route. Call requirePermission("payments:send") in the router
+// to protect a specific route
+
 public class RbacMiddleware {
 
   /**
