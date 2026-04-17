@@ -1,11 +1,10 @@
 package com.akiba.auth.handlers;
 
 import at.favre.lib.crypto.bcrypt.BCrypt;
+import com.akiba.auth.services.MailService;
 import io.vertx.core.Future;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.redis.client.RedisAPI;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Tuple;
@@ -17,14 +16,14 @@ public class RegisterHandler {
 
   private final Pool pgPool;
   private final RedisAPI redis;
-  private final WebClient webClient;
+  private final MailService mailService;
 
-  private static final int OTP_TTL_SECONDS = 86400;
+  private static final int OTP_TTL_SECONDS = 86400; // 24 hours
 
-  public RegisterHandler(Pool pgPool, RedisAPI redis, io.vertx.core.Vertx vertx, WebClient webClient) {
-    this.pgPool     = pgPool;
-    this.redis      = redis;
-    this.webClient  = webClient;
+  public RegisterHandler(Pool pgPool, RedisAPI redis, MailService mailService) {
+    this.pgPool      = pgPool;
+    this.redis       = redis;
+    this.mailService = mailService;
   }
 
   public void handle(RoutingContext ctx) {
@@ -57,85 +56,38 @@ public class RegisterHandler {
 
     saveUser(userId, fullName, email, normalizedPhone, passwordHash)
       .compose(v -> storeOtpInRedis(userId, otp))
-      .compose(v -> sendOtpSms(normalizedPhone, otp))
-      .compose(v -> sendVerificationEmail(userId, email, fullName))
+      .compose(v -> mailService.sendVerificationOtp(email, fullName, otp))
       .onSuccess(v -> ctx.response()
         .setStatusCode(201)
         .putHeader("Content-Type", "application/json")
         .end(new JsonObject()
-          .put("message", "Registration successful. Check your phone and email to verify your account.")
+          .put("message", "Registration successful. Please check your email to verify your account.")
           .put("userId", userId)
           .encode()))
       .onFailure(err -> {
+        err.printStackTrace();
         System.err.println("[RegisterHandler] ❌ " + err.getClass().getSimpleName() + ": " + err.getMessage());
-        rejectWith(ctx, 500, "Registration failed: " + err.getMessage());
+        rejectWith(ctx, 500, "Registration failed. Please try again.");
       });
   }
-
-  // ─── DB ───────────────────────────────────────────────────────────────────
 
   private Future<Void> saveUser(String userId, String fullName,
                                 String email, String phone, String passwordHash) {
     String sql = """
-      INSERT INTO auth.users (id, full_name, email, phone, password_hash, role_id)
+      INSERT INTO auth.users (id, full_name, email, phone, password_hash, role_id, status)
       VALUES ($1, $2, $3, $4, $5,
-        (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'))
+        (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'),
+        'PENDING_VERIFICATION')
       """;
     return pgPool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(userId), fullName, email, phone, passwordHash))
       .mapEmpty();
   }
 
-  // ─── Redis ────────────────────────────────────────────────────────────────
-
   private Future<Void> storeOtpInRedis(String userId, String otp) {
-    String key = "otp:" + userId + ":phone";
+    String key = "email_verify:" + userId;
     return redis.setex(key, String.valueOf(OTP_TTL_SECONDS), otp).mapEmpty();
   }
-
-  // ─── SMS ──────────────────────────────────────────────────────────────────
-
-  private Future<Void> sendOtpSms(String phone, String otp) {
-    String apiKey   = System.getenv("AT_API_KEY");
-    String username = System.getenv("AT_USERNAME");
-
-    if (apiKey == null || apiKey.isBlank()) {
-      System.err.println("[RegisterHandler] ❌ AT_API_KEY is not set");
-      return Future.failedFuture("SMS service misconfigured: AT_API_KEY is missing");
-    }
-    if (username == null || username.isBlank()) {
-      System.err.println("[RegisterHandler] ❌ AT_USERNAME is not set");
-      return Future.failedFuture("SMS service misconfigured: AT_USERNAME is missing");
-    }
-
-    String body = "username=" + username
-      + "&to=" + phone
-      + "&message=Your+Akiba+verification+code+is+" + otp + ".+It+expires+in+5+minutes.";
-
-    return webClient.postAbs("https://api.sandbox.africastalking.com/version1/messaging")
-      .putHeader("apiKey", apiKey)
-      .putHeader("Accept", "application/json")
-      .putHeader("Content-Type", "application/x-www-form-urlencoded")
-      .sendBuffer(Buffer.buffer(body))
-      .compose(response -> {
-        System.out.println("[RegisterHandler] AT response (" + response.statusCode() + "): " + response.bodyAsString());
-        if (response.statusCode() != 201) {
-          return Future.failedFuture("SMS delivery failed: " + response.bodyAsString());
-        }
-        System.out.println("[RegisterHandler] ✅ OTP SMS sent to " + phone);
-        return Future.<Void>succeededFuture();
-      });
-  }
-
-  // ─── Email ────────────────────────────────────────────────────────────────
-
-  private Future<Void> sendVerificationEmail(String userId, String email, String fullName) {
-    // TODO: implement email sending (e.g. via SendGrid or Mailgun)
-    System.out.println("[RegisterHandler] 📧 Email verification pending → userId=" + userId + ", email=" + email);
-    return Future.succeededFuture();
-  }
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private String generateOtp() {
     return String.format("%06d", new SecureRandom().nextInt(999999));
@@ -144,9 +96,9 @@ public class RegisterHandler {
   private String normalizePhone(String phone) {
     if (phone == null) return null;
     phone = phone.trim().replaceAll("\\s+", "");
-    if (phone.matches("^0[17]\\d{8}$"))        return "+254" + phone.substring(1);
-    if (phone.matches("^\\+254[17]\\d{8}$"))   return phone;
-    if (phone.matches("^254[17]\\d{8}$"))      return "+" + phone;
+    if (phone.matches("^0[17]\\d{8}$"))       return "+254" + phone.substring(1);
+    if (phone.matches("^\\+254[17]\\d{8}$"))  return phone;
+    if (phone.matches("^254[17]\\d{8}$"))     return "+" + phone;
     return null;
   }
 

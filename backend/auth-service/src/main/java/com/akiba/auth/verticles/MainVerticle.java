@@ -1,10 +1,10 @@
 package com.akiba.auth.verticles;
 
 import com.akiba.auth.handlers.*;
+import com.akiba.auth.services.MailService;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.VerticleBase;
-import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
@@ -12,7 +12,6 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.redis.client.Redis;
@@ -26,14 +25,15 @@ public class MainVerticle extends VerticleBase {
 
   private Pool pgPool;
   private RedisAPI redis;
-  private WebClient webClient;
   private JWTAuth jwtAuth;
+  private MailService mailService;
 
   @Override
   public Future<Void> start() {
     return deploySchemaVerticle()
       .compose(v -> connectPostgres())
       .compose(v -> connectRedis())
+      .compose(v -> initMailService())
       .compose(v -> startHttpServer())
       .onSuccess(v -> System.out.println("[AuthService] ✅ Started on port " + servicePort()));
   }
@@ -74,17 +74,21 @@ public class MainVerticle extends VerticleBase {
       .connect()
       .compose(conn -> {
         redis = RedisAPI.api(conn);
-        webClient = WebClient.create(vertx, new io.vertx.ext.web.client.WebClientOptions()
-          .setSsl(true)
-          .setTrustAll(true)
-          .setVerifyHost(false));
         jwtAuth = createJwtAuth();
         System.out.println("[AuthService] ✅ Redis connected");
         return Future.<Void>succeededFuture();
       });
   }
 
-  // Step 4: HTTP Server & Router
+  // Step 4: Mail Service
+
+  private Future<Void> initMailService() {
+    mailService = new MailService(vertx);
+    System.out.println("[AuthService] ✅ Mail service ready");
+    return Future.succeededFuture();
+  }
+
+  // Step 5: HTTP Server & Router
 
   private Future<Void> startHttpServer() {
     Router router = buildRouter();
@@ -99,7 +103,7 @@ public class MainVerticle extends VerticleBase {
 
     router.route().handler(
       CorsHandler.create()
-        .addOrigin("*") // its similar to,,  .allowedOrigin("*") though its the newer version
+        .addOrigin("*")
         .allowedMethod(io.vertx.core.http.HttpMethod.GET)
         .allowedMethod(io.vertx.core.http.HttpMethod.POST)
         .allowedMethod(io.vertx.core.http.HttpMethod.PUT)
@@ -110,32 +114,27 @@ public class MainVerticle extends VerticleBase {
     router.route().handler(BodyHandler.create());
 
     // ─── Handlers ─────────────────────────────────────────────────────────
-    RegisterHandler     registerHandler     = new RegisterHandler(pgPool, redis, vertx, webClient);
-    VerifyPhoneHandler  verifyPhoneHandler  = new VerifyPhoneHandler(pgPool, redis);
-    VerifyEmailHandler  verifyEmailHandler  = new VerifyEmailHandler(pgPool);
-    LoginHandler        loginHandler        = new LoginHandler(pgPool, redis, jwtAuth);
-    RefreshTokenHandler refreshTokenHandler = new RefreshTokenHandler(pgPool, redis, jwtAuth);
-    LogoutHandler       logoutHandler       = new LogoutHandler(pgPool, redis);
+    RegisterHandler           registerHandler           = new RegisterHandler(pgPool, redis, mailService);
+    VerifyEmailHandler        verifyEmailHandler        = new VerifyEmailHandler(pgPool, redis);
+    ResendVerificationHandler resendVerificationHandler = new ResendVerificationHandler(pgPool, redis, mailService);
+    LoginHandler              loginHandler              = new LoginHandler(pgPool, redis, jwtAuth);
+    RefreshTokenHandler       refreshTokenHandler       = new RefreshTokenHandler(pgPool, redis, jwtAuth);
+    LogoutHandler             logoutHandler             = new LogoutHandler(pgPool, redis);
+    ForgotPasswordHandler     forgotPasswordHandler     = new ForgotPasswordHandler(pgPool, redis, mailService);
+    ResetpasswordHandler      resetPasswordHandler      = new ResetpasswordHandler(pgPool, redis);
 
     // ─── Public Routes ────────────────────────────────────────────────────
-    router.post("/auth/register")     .handler(registerHandler::handle);
-    router.post("/auth/verify-phone") .handler(verifyPhoneHandler::handle);
-    router.post("/auth/verify-email") .handler(verifyEmailHandler::handle);
-    router.post("/auth/login")        .handler(loginHandler::handle);
-    router.post("/auth/refresh")      .handler(refreshTokenHandler::handle);
+    router.post("/auth/register")             .handler(registerHandler::handle);
+    router.post("/auth/verify-email")         .handler(verifyEmailHandler::handle);
+    router.post("/auth/resend-verification")  .handler(resendVerificationHandler::handle);
+    router.post("/auth/login")                .handler(loginHandler::handle);
+    router.post("/auth/refresh")              .handler(refreshTokenHandler::handle);
+    router.post("/auth/forgot-password")      .handler(forgotPasswordHandler::handle);
+    router.post("/auth/reset-password")       .handler(resetPasswordHandler::handle);
 
     // ─── Protected Routes (JWT required) ──────────────────────────────────
     router.post("/auth/logout")
       .handler(jwtMiddleware())
-      .handler(ctx -> {
-        JsonObject principal = ctx.user().principal();
-        String jti = principal.getString("jti");
-        long exp = principal.getLong("exp", 0L);
-        int remaining = (int) (exp - (System.currentTimeMillis() / 1000));
-        ctx.put("jti", jti);
-        ctx.put("remainingTtl", Math.max(remaining, 0));
-        ctx.next();
-      })
       .handler(logoutHandler::handle);
 
     router.put("/auth/profile")

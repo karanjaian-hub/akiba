@@ -58,7 +58,7 @@ public class LoginHandler {
         .putHeader("Content-Type", "application/json")
         .end(tokens.encode()))
       .onFailure(err -> {
-        System.err.println("[LoginHandler] ❌ " + err.getMessage());
+        System.err.println("[LoginHandler]  " + err.getMessage());
         rejectWith(ctx, 401, err.getMessage());
       });
   }

@@ -58,6 +58,11 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     environment:
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USERNAME: karanjaian420@gmail.com
+      SMTP_PASSWORD: ijji prmq uzob xhvz
+      SMTP_FROM: Akiba <karanjaian420@gmail.com>
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: akiba_db

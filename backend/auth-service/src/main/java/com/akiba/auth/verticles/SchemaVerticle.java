@@ -7,6 +7,11 @@ import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
+/**
+ * Runs once on startup — creates all auth schema tables and seeds
+ * roles, permissions and default users.
+ * Every statement uses IF NOT EXISTS so this is safe to re-run.
+ */
 public class SchemaVerticle extends VerticleBase {
 
   private Pool pgPool;
@@ -15,11 +20,10 @@ public class SchemaVerticle extends VerticleBase {
   public Future<?> start() {
     pgPool = createPgPool();
 
-    // Each step uses .compose() — if any step fails the chain stops
     return createSchema()
       .compose(v -> createBaseTablesInParallel())
       .compose(v -> createRolePermissionsTable())
-      .compose(v -> createUserTablesInParallel())
+      .compose(v -> createUserTables())
       .compose(v -> seedRoles())
       .compose(v -> seedPermissions())
       .compose(v -> seedRolePermissions())
@@ -27,7 +31,6 @@ public class SchemaVerticle extends VerticleBase {
       .onSuccess(v -> System.out.println("[SchemaVerticle] ✅ All tables created and seeded"))
       .onFailure(err -> {
         System.err.println("[SchemaVerticle] ❌ Schema setup failed: " + err.getMessage());
-        // Close the pool here too — stop() may never be called if start() fails
         if (pgPool != null) pgPool.close();
       });
   }
@@ -92,9 +95,10 @@ public class SchemaVerticle extends VerticleBase {
       """).execute().mapEmpty();
   }
 
-  // ─── Step 4: User tables (parallel — all depend on roles) ─────────────────
+  // ─── Step 4: User tables ──────────────────────────────────────────────────
+  // otps table removed — phone/email verification no longer required at signup.
 
-  private Future<Void> createUserTablesInParallel() {
+  private Future<Void> createUserTables() {
     Future<Void> users = pgPool.query("""
       CREATE TABLE IF NOT EXISTS auth.users (
         id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,18 +114,6 @@ public class SchemaVerticle extends VerticleBase {
       )
       """).execute().mapEmpty();
 
-    Future<Void> otps = pgPool.query("""
-      CREATE TABLE IF NOT EXISTS auth.otps (
-        id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id    UUID        REFERENCES auth.users(id) ON DELETE CASCADE,
-        otp_code   VARCHAR(6)  NOT NULL,
-        type       VARCHAR(20) NOT NULL,
-        expires_at TIMESTAMP   NOT NULL,
-        used       BOOLEAN     DEFAULT false,
-        created_at TIMESTAMP   DEFAULT NOW()
-      )
-      """).execute().mapEmpty();
-
     Future<Void> sessions = pgPool.query("""
       CREATE TABLE IF NOT EXISTS auth.sessions (
         id            UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -133,7 +125,7 @@ public class SchemaVerticle extends VerticleBase {
       )
       """).execute().mapEmpty();
 
-    return Future.all(users, otps, sessions).mapEmpty();
+    return Future.all(users, sessions).mapEmpty();
   }
 
   // ─── Step 5: Seed Roles ────────────────────────────────────────────────────
@@ -195,10 +187,6 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   // ─── Step 8: Seed default users ───────────────────────────────────────────
-  // Phone numbers stored in E.164 format (+254) for SMS routing compatibility.
-  // Password hash is pulled from the SEED_PASSWORD_HASH env var — do NOT
-  // hardcode a bcrypt hash in source. Generate one with:
-  //   htpasswd -bnBC 10 "" yourpassword | tr -d ':\n'
 
   private Future<Void> seedAdminUsers() {
     String passwordHash = System.getenv().getOrDefault(
@@ -235,4 +223,5 @@ public class SchemaVerticle extends VerticleBase {
     if (pgPool != null) pgPool.close();
     return Future.succeededFuture();
   }
+
 }
