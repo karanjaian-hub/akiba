@@ -1,20 +1,17 @@
 package com.akiba.gateway.middleware;
 
+
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
-// Checks that the authenticated user has the required permission
-// for the route. Call requirePermission("payments:send") in the router
-// to protect a specific route
-
+/**
+ * Checks the authenticated user has the required permission for a route.
+ * Usage: .handler(rbac.requirePermission("payments:send"))
+ */
 public class RbacMiddleware {
 
-  /**
-   * Returns a handler that enforces a specific permission.
-   * Usage in router: .handler(rbac.requirePermission("payments:send"))
-   */
   public Handler<RoutingContext> requirePermission(String requiredPermission) {
     return ctx -> {
       JsonArray permissions = ctx.get("permissions");
@@ -24,6 +21,7 @@ public class RbacMiddleware {
         return;
       }
 
+      // Java 21 stream — check if required permission exists in claims
       boolean hasPermission = permissions.stream()
         .anyMatch(p -> requiredPermission.equals(p.toString()));
 
@@ -38,9 +36,6 @@ public class RbacMiddleware {
     };
   }
 
-  /**
-   * Enforces ROLE_ADMIN — used for admin-only routes.
-   */
   public Handler<RoutingContext> requireAdmin() {
     return ctx -> {
       String role = ctx.get("role");

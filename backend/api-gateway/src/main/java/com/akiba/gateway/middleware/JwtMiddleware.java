@@ -1,19 +1,20 @@
 package com.akiba.gateway.middleware;
 
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.authentication.TokenCredentials;
+import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.redis.client.RedisAPI;
 
-// Verifies JWT on every protected route.
-// Checks the Redis blacklist for revoked tokens (logout).
-// Attaches userId, role, and jti to RoutingContext for downstream handlers.
-
+/**
+ * Verifies JWT on every protected route.
+ * Checks Redis blacklist for revoked tokens (post-logout).
+ * Attaches userId, role, jti, and remainingTtl to RoutingContext.
+ */
 public class JwtMiddleware {
 
-  private final JWTAuth jwtAuth;
-  private final RedisAPI redis;
+  private final JWTAuth    jwtAuth;
+  private final RedisAPI   redis;
 
   public JwtMiddleware(JWTAuth jwtAuth, RedisAPI redis) {
     this.jwtAuth = jwtAuth;
@@ -42,13 +43,13 @@ public class JwtMiddleware {
               return io.vertx.core.Future.failedFuture("Token has been revoked.");
             }
 
-            // Attach claims to context so downstream handlers don't re-parse JWT
+            // Attach claims so downstream handlers don't re-parse the JWT
             ctx.put("userId",      principal.getString("sub"));
             ctx.put("role",        principal.getString("role"));
             ctx.put("permissions", principal.getJsonArray("permissions"));
             ctx.put("jti",         jti);
 
-            // Calculate remaining TTL for blacklisting on logout
+            // Remaining TTL used by LogoutHandler to set blacklist expiry
             long exp         = principal.getLong("exp", 0L);
             long now         = System.currentTimeMillis() / 1000;
             int remainingTtl = (int) Math.max(0, exp - now);

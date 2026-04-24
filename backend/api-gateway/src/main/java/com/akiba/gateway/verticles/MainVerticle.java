@@ -2,42 +2,35 @@ package com.akiba.gateway.verticles;
 
 import com.akiba.gateway.middleware.JwtMiddleware;
 import com.akiba.gateway.middleware.RateLimitMiddleware;
-import com.akiba.gateway.middleware.RbacMiddleware;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
+import io.vertx.core.VerticleBase;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
-import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.RedisAPI;
 import io.vertx.redis.client.RedisOptions;
 
-
-public class MainVerticle extends AbstractVerticle {
+public class MainVerticle extends VerticleBase {
 
   private RedisAPI redis;
   private JWTAuth jwtAuth;
   private HttpClient httpClient;
 
   @Override
-  public void start(Promise<Void> startPromise) {
-    connectRedis()
+  public Future<?> start() {
+    return connectRedis()
       .compose(v -> startHttpServer())
-      .onSuccess(v -> {
-        System.out.println("[ApiGateway] ✅ Started on port " + servicePort());
-        startPromise.complete();
-      })
-      .onFailure(err -> {
-        System.err.println("[ApiGateway] ❌ Startup failed: " + err.getMessage());
-        startPromise.fail(err);
-      });
+      .onSuccess(v -> System.out.println("[ApiGateway] ✅ Started on port " + servicePort()))
+      .onFailure(err -> System.err.println("[ApiGateway] ❌ Startup failed: " + err.getMessage()));
   }
 
   // ─── Redis ────────────────────────────────────────────────────────────────
@@ -45,10 +38,10 @@ public class MainVerticle extends AbstractVerticle {
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
     return Redis.createClient(vertx, new RedisOptions()
-      .setConnectionString("redis://" + redisHost + ":6379"))
+        .setConnectionString("redis://" + redisHost + ":6379"))
       .connect()
       .compose(conn -> {
-        redis   = RedisAPI.api(conn);
+        redis = RedisAPI.api(conn);
         jwtAuth = createJwtAuth();
         httpClient = vertx.createHttpClient(new HttpClientOptions()
           .setConnectTimeout(5000));
@@ -60,9 +53,8 @@ public class MainVerticle extends AbstractVerticle {
   // ─── HTTP Server ──────────────────────────────────────────────────────────
 
   private Future<Void> startHttpServer() {
-    Router router = buildRouter();
     return vertx.createHttpServer()
-      .requestHandler(router)
+      .requestHandler(buildRouter())
       .listen(servicePort())
       .mapEmpty();
   }
@@ -70,12 +62,10 @@ public class MainVerticle extends AbstractVerticle {
   private Router buildRouter() {
     Router router = Router.router(vertx);
 
-    // Middleware instances
-    JwtMiddleware jwtMiddleware       = new JwtMiddleware(jwtAuth, redis);
-    RbacMiddleware rbacMiddleware      = new RbacMiddleware();
+    JwtMiddleware jwtMiddleware = new JwtMiddleware(jwtAuth, redis);
     RateLimitMiddleware rateLimitMiddleware = new RateLimitMiddleware(redis);
 
-    // CORS for React Native
+    // In Vert.x 5 CorsHandler.create() takes no args — origins added via allowedOrigin()
     router.route().handler(CorsHandler.create()
       .addOrigin("*")
       .allowedMethod(HttpMethod.GET)
@@ -88,14 +78,12 @@ public class MainVerticle extends AbstractVerticle {
     router.route().handler(BodyHandler.create());
 
     // ─── Health ───────────────────────────────────────────────────────────
-    router.get("/health").handler(ctx -> checkDownstreamHealth(ctx));
+    router.get("/health").handler(this::handleHealth);
 
-    // ─── Public Routes (no JWT needed) ───────────────────────────────────
-    router.post("/auth/register")     .handler(ctx -> proxyTo(ctx, "auth-service",     8081));
-    router.post("/auth/verify-phone") .handler(ctx -> proxyTo(ctx, "auth-service",     8081));
-    router.post("/auth/verify-email") .handler(ctx -> proxyTo(ctx, "auth-service",     8081));
-    router.post("/auth/login")        .handler(ctx -> proxyTo(ctx, "auth-service",     8081));
-    router.post("/auth/refresh")      .handler(ctx -> proxyTo(ctx, "auth-service",     8081));
+    // ─── Public Routes ────────────────────────────────────────────────────
+    router.post("/auth/register").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/login").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/refresh").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
 
     // ─── Protected Routes ─────────────────────────────────────────────────
     router.route("/auth/*")
@@ -114,7 +102,6 @@ public class MainVerticle extends AbstractVerticle {
       .handler(jwtMiddleware::handle)
       .handler(ctx -> proxyTo(ctx, "ai-service", 8084));
 
-    // Payment routes get rate limiting — max 5 per minute per user
     router.route("/payments/*")
       .handler(jwtMiddleware::handle)
       .handler(rateLimitMiddleware::handle)
@@ -137,19 +124,16 @@ public class MainVerticle extends AbstractVerticle {
 
   // ─── Proxy ────────────────────────────────────────────────────────────────
 
-  private void proxyTo(io.vertx.ext.web.RoutingContext ctx, String service, int port) {
+  private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
-    String method  = ctx.request().method().name();
-    String path    = ctx.request().uri();
-    String userId  = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
+    String method = ctx.request().method().name();
+    String path = ctx.request().uri();
+    String userId = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
 
-    httpClient.request(ctx.request().method(),
-      port, service, path)
+    httpClient.request(ctx.request().method(), port, service, path)
       .compose(req -> {
-        // Forward all original headers to the downstream service
         ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
-        // Pass userId downstream so services don't need to decode JWT themselves
-        req.putHeader("X-User-Id",  userId);
+        req.putHeader("X-User-Id", userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
         return req.send(ctx.body().buffer());
       })
@@ -160,37 +144,27 @@ public class MainVerticle extends AbstractVerticle {
         ctx.response().setStatusCode(upstreamRes.statusCode());
         upstreamRes.headers().forEach(h ->
           ctx.response().putHeader(h.getKey(), h.getValue()));
-        upstreamRes.body().onSuccess(body ->
-          ctx.response().end(body));
+        upstreamRes.body().onSuccess(body -> ctx.response().end(body));
       })
       .onFailure(err -> {
         System.err.println("[ApiGateway] ❌ Proxy failed → " + service + ": " + err.getMessage());
-        ctx.response().setStatusCode(502)
+        ctx.response()
+          .setStatusCode(502)
           .putHeader("Content-Type", "application/json")
-          .end("{\"error\":\"Service unavailable\"}");
+          .end(new JsonObject().put("error", "Service unavailable").encode());
       });
   }
 
-  // ─── Health Check ─────────────────────────────────────────────────────────
+  // ─── Health ───────────────────────────────────────────────────────────────
 
-  private void checkDownstreamHealth(io.vertx.ext.web.RoutingContext ctx) {
-    io.vertx.core.json.JsonObject status = new io.vertx.core.json.JsonObject()
-      .put("status",  "UP")
-      .put("service", "api-gateway")
-      .put("downstream", new io.vertx.core.json.JsonObject()
-        .put("auth-service",         "http://auth-service:8081/health")
-        .put("transaction-service",  "http://transaction-service:8082/health")
-        .put("parsing-service",      "http://parsing-service:8083/health")
-        .put("ai-service",           "http://ai-service:8084/health")
-        .put("payment-service",      "http://payment-service:8085/health")
-        .put("budget-service",       "http://budget-service:8086/health")
-        .put("savings-service",      "http://savings-service:8087/health")
-        .put("notification-service", "http://notification-service:8088/health"));
-
+  private void handleHealth(RoutingContext ctx) {
     ctx.response()
       .setStatusCode(200)
       .putHeader("Content-Type", "application/json")
-      .end(status.encode());
+      .end(new JsonObject()
+        .put("status", "UP")
+        .put("service", "api-gateway")
+        .encode());
   }
 
   // ─── JWT Setup ────────────────────────────────────────────────────────────
@@ -208,8 +182,9 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   @Override
-  public void stop() {
+  public Future<?> stop() throws Exception {
     if (httpClient != null) httpClient.close();
     System.out.println("[ApiGateway] 🛑 Stopped");
+    return super.stop();
   }
 }

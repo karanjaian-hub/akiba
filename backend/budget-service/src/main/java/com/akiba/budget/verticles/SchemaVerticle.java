@@ -1,34 +1,28 @@
 package com.akiba.budget.verticles;
 
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.sqlclient.Pool;  // ← changed
+import io.vertx.core.VerticleBase;
+import io.vertx.sqlclient.Pool;
 
-public class SchemaVerticle extends AbstractVerticle {
+public class SchemaVerticle extends VerticleBase {
 
-  private final Pool pgPool;  // ← changed
+  // Pool is the Vert.x 5 interface — PgPool is deprecated and removed from direct use
+  private final Pool pool;
 
-  public SchemaVerticle(Pool pgPool) {  // ← changed
-    this.pgPool = pgPool;
+  public SchemaVerticle(Pool pool) {
+    this.pool = pool;
   }
 
   @Override
-  public void start(Promise<Void> startPromise) {
-    createSchema()
+  public Future<?> start() {
+    return createSchema()
       .compose(v -> Future.all(createLimitsTable(), createSpendTrackingTable()))
-      .onSuccess(v -> {
-        System.out.println("[BudgetService] Schema ready.");
-        startPromise.complete();
-      })
-      .onFailure(err -> {
-        System.err.println("[BudgetService] Schema setup failed: " + err.getMessage());
-        startPromise.fail(err);
-      });
+      .onSuccess(v -> System.out.println("[BudgetService] Schema ready."))
+      .onFailure(e -> System.err.println("[BudgetService] Schema failed: " + e.getMessage()));
   }
 
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS budgets")
+    return pool.query("CREATE SCHEMA IF NOT EXISTS budgets")
       .execute()
       .mapEmpty();
   }
@@ -45,7 +39,7 @@ public class SchemaVerticle extends AbstractVerticle {
                 UNIQUE(user_id, category)
             )
             """;
-    return pgPool.query(sql).execute()
+    return pool.query(sql).execute()
       .onFailure(e -> System.err.println("[SchemaVerticle] limits table failed: " + e.getMessage()))
       .mapEmpty();
   }
@@ -63,7 +57,7 @@ public class SchemaVerticle extends AbstractVerticle {
                 UNIQUE(user_id, category, month, year)
             )
             """;
-    return pgPool.query(sql).execute()
+    return pool.query(sql).execute()
       .onFailure(e -> System.err.println("[SchemaVerticle] spend_tracking table failed: " + e.getMessage()))
       .mapEmpty();
   }

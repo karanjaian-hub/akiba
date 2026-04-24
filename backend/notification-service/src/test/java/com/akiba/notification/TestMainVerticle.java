@@ -1,5 +1,6 @@
 package com.akiba.notification;
 
+import com.akiba.notification.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

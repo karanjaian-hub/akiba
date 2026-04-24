@@ -1,5 +1,5 @@
 import base64
-import fitz  # PyMuPDF
+import fitz  # comes from: pip install pymupdf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -22,19 +22,23 @@ def extract_text(request: ExtractRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 content")
 
+    doc = None
     try:
-        # fitz.open with stream= reads from bytes directly, no temp file needed
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        pages_text = [page.get_text() for page in doc]
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Could not open PDF: {e}")
+    finally:
+        if doc:
+            doc.close()
 
-    # Extract text from every page and join with newlines
-    pages_text = [page.get_text() for page in doc]
-    full_text  = "\n".join(pages_text).strip()
-    doc.close()
+    full_text = "\n".join(pages_text).strip()
 
     if not full_text:
-        raise HTTPException(status_code=422, detail="PDF appears to be image-only — no extractable text found")
+        raise HTTPException(
+            status_code=422,
+            detail="PDF appears to be image-only — no extractable text found",
+        )
 
     return ExtractResponse(text=full_text, page_count=len(pages_text))
 

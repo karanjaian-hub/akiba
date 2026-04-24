@@ -14,21 +14,28 @@ public class CreateTransactionHandler {
   }
 
   public void handle(RoutingContext ctx) {
-    String userId  = ctx.get("userId");
-    JsonObject body = ctx.body().asJsonObject();
+    String userId = ctx.get("userId");
 
-    if (body == null) {
-      ctx.response().setStatusCode(400).end("{\"error\":\"Request body is required\"}");
+    // Guard: userId must be set by auth middleware before reaching here
+    if (userId == null || userId.isBlank()) {
+      ctx.response()
+        .setStatusCode(401)
+        .end("{\"error\":\"Unauthorized: missing user identity\"}");
       return;
     }
 
-    // Mark manual entries with source=MANUAL so the UI can distinguish them
-    body.put("source",    "MANUAL");
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("{\"error\":\"Request body is required\"}");
+      return;
+    }
+
+    body.put("source", "MANUAL");
     body.put("anomalous", false);
 
-    // Wrap in array — bulkInsert handles both batch and single entries
     JsonArray single = new JsonArray().add(body);
-
     transactionRepo.bulkInsert(userId, single)
       .onSuccess(v -> ctx.response()
         .setStatusCode(201)

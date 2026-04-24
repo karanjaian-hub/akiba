@@ -1,36 +1,32 @@
 package com.akiba.savings.verticles;
 
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.pgclient.PgPool;
+import io.vertx.core.VerticleBase;
+import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SchemaVerticle extends AbstractVerticle {
+public class SchemaVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(SchemaVerticle.class);
 
-  private final PgPool pgPool;
+  private final Pool pool;
 
-  public SchemaVerticle(PgPool pgPool) {
-    this.pgPool = pgPool;
+  public SchemaVerticle(Pool pool) {
+    this.pool = pool;
   }
 
   @Override
-  public void start(Promise<Void> startPromise) {
-    createSchema()
+  public Future<?> start() {
+    return createSchema()
       .compose(v -> createGoalsTable())
       .compose(v -> createContributionsTable())
-      .onSuccess(v -> {
-        log.info("Savings schema ready");
-        startPromise.complete();
-      })
-      .onFailure(startPromise::fail);
+      .onSuccess(v -> log.info("Savings schema ready"))
+      .onFailure(err -> log.error("Savings schema setup failed", err));
   }
 
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS savings").execute().mapEmpty();
+    return pool.query("CREATE SCHEMA IF NOT EXISTS savings").execute().mapEmpty();
   }
 
   private Future<Void> createGoalsTable() {
@@ -47,7 +43,7 @@ public class SchemaVerticle extends AbstractVerticle {
         created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
       )
       """;
-    return pgPool.query(sql).execute().mapEmpty();
+    return pool.query(sql).execute().mapEmpty();
   }
 
   private Future<Void> createContributionsTable() {
@@ -57,11 +53,11 @@ public class SchemaVerticle extends AbstractVerticle {
         goal_id         UUID           NOT NULL REFERENCES savings.goals(id),
         user_id         UUID           NOT NULL,
         amount          DECIMAL(15,2)  NOT NULL,
-        transaction_id  VARCHAR(100),              -- optional link to payments.records
+        transaction_id  VARCHAR(100),
         note            TEXT,
         created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
       )
       """;
-    return pgPool.query(sql).execute().mapEmpty();
+    return pool.query(sql).execute().mapEmpty();
   }
 }

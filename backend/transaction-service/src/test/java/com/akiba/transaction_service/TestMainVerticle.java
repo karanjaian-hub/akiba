@@ -1,6 +1,6 @@
 package com.akiba.transaction_service;
 
-import com.akiba.transaction.MainVerticle;
+import com.akiba.transaction.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

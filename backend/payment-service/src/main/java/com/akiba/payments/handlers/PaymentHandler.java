@@ -3,6 +3,7 @@ package com.akiba.payments.handlers;
 import com.akiba.payments.repositories.PaymentRepository;
 import com.akiba.payments.services.DarajaService;
 import io.vertx.core.Future;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
@@ -23,11 +24,8 @@ public class PaymentHandler {
 
   private static final Logger log = LoggerFactory.getLogger(PaymentHandler.class);
 
-  // Redis key prefix for pending payments — TTL of 120s matches M-Pesa session timeout
-  private static final String PENDING_KEY_PREFIX = "payment:";
-  private static final int    PENDING_TTL_SECONDS = 120;
-
-  // RabbitMQ queue that budget-service and notification-service listen on
+  private static final String PENDING_KEY_PREFIX      = "payment:";
+  private static final int    PENDING_TTL_SECONDS     = 120;
   private static final String PAYMENT_COMPLETED_QUEUE = "payment.completed";
 
   private final DarajaService     darajaService;
@@ -38,12 +36,12 @@ public class PaymentHandler {
   private final String            budgetServiceUrl;
 
   public PaymentHandler(
-      DarajaService darajaService,
-      PaymentRepository paymentRepository,
-      WebClient webClient,
-      RedisAPI redis,
-      RabbitMQClient rabbitMQ,
-      String budgetServiceUrl) {
+    DarajaService darajaService,
+    PaymentRepository paymentRepository,
+    WebClient webClient,
+    RedisAPI redis,
+    RabbitMQClient rabbitMQ,
+    String budgetServiceUrl) {
     this.darajaService     = darajaService;
     this.paymentRepository = paymentRepository;
     this.webClient         = webClient;
@@ -52,19 +50,8 @@ public class PaymentHandler {
     this.budgetServiceUrl  = budgetServiceUrl;
   }
 
-  // -------------------------------------------------------------------------
-  // POST /payments/initiate
-  // -------------------------------------------------------------------------
+  // ── POST /payments/initiate ───────────────────────────────────────────────
 
-  /**
-   * Full initiate flow:
-   *   1. Validate request body
-   *   2. Ask budget-service if user can afford this
-   *   3. Fire STK Push to Daraja
-   *   4. Save payment as PENDING in DB + Redis
-   *   5. Upsert recipient for quick re-use
-   *   6. Return immediately (mobile polls /status for result)
-   */
   public void initiatePayment(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject();
     if (body == null) {
@@ -72,7 +59,7 @@ public class PaymentHandler {
       return;
     }
 
-    String userId   = ctx.user().subject(); // extracted from JWT by API gateway
+    String userId   = ctx.user().subject();
     String phone    = body.getString("phone");
     Double amount   = body.getDouble("amount");
     String category = body.getString("category");
@@ -85,15 +72,13 @@ public class PaymentHandler {
     checkBudgetAffordability(userId, category, amount)
       .compose(canAfford -> {
         if (!canAfford) {
-          // Return 400 immediately — don't even hit Daraja
           replyError(ctx, 400, "Budget limit reached for category: " + category);
-          return Future.failedFuture("budget_exceeded"); // stops the chain
+          return Future.failedFuture("budget_exceeded");
         }
         return fireStkPush(body, amount);
       })
       .compose(darajaResponse -> saveAndRespond(ctx, userId, body, amount, darajaResponse))
       .onFailure(err -> {
-        // "budget_exceeded" was already responded to above, so swallow it here
         if (!"budget_exceeded".equals(err.getMessage())) {
           log.error("Payment initiation failed", err);
           replyError(ctx, 502, "Payment initiation failed: " + err.getMessage());
@@ -101,18 +86,12 @@ public class PaymentHandler {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // POST /payments/callback  (Daraja webhook — no JWT)
-  // -------------------------------------------------------------------------
+  // ── POST /payments/callback ───────────────────────────────────────────────
 
-  /**
-   * Daraja calls this after the customer completes or cancels the M-Pesa prompt.
-   * We must reply with 200 quickly or Daraja will retry.
-   */
   public void handleCallback(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject();
     if (body == null) {
-      ctx.response().setStatusCode(200).end(); // always ACK Daraja
+      ctx.response().setStatusCode(200).end();
       return;
     }
 
@@ -127,16 +106,13 @@ public class PaymentHandler {
     // ACK Daraja immediately — don't wait for our DB write
     ctx.response().setStatusCode(200).end();
 
-    // Update DB, clear Redis, publish to RabbitMQ (all async, failures logged not thrown)
     paymentRepository.updatePaymentStatus(checkoutId, status, mpesaReceipt)
       .compose(v -> clearPendingCache(checkoutId))
-      .compose(v -> fetchAndPublishEvent(checkoutId, status))
+      .compose(v -> publishEvent(checkoutId, status))
       .onFailure(err -> log.error("Callback post-processing failed for {}", checkoutId, err));
   }
 
-  // -------------------------------------------------------------------------
-  // GET /payments/history
-  // -------------------------------------------------------------------------
+  // ── GET /payments/history ─────────────────────────────────────────────────
 
   public void getPaymentHistory(RoutingContext ctx) {
     String userId = ctx.user().subject();
@@ -153,35 +129,23 @@ public class PaymentHandler {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // GET /payments/status/:paymentId
-  // -------------------------------------------------------------------------
+  // ── GET /payments/status/:paymentId ──────────────────────────────────────
 
-  /**
-   * The mobile app polls this every 3 seconds while showing the "pending" spinner.
-   * We check Redis first (fast path) then fall back to DB.
-   */
   public void getPaymentStatus(RoutingContext ctx) {
     String paymentId = ctx.pathParam("paymentId");
     String userId    = ctx.user().subject();
 
-    // Redis holds PENDING state for 120s — if it's gone, payment resolved
     redis.get(PENDING_KEY_PREFIX + paymentId)
       .compose(cached -> {
         if (cached != null) {
-          // Still pending — return quickly without hitting DB
-          return Future.succeededFuture(new JsonObject().put("status", "PENDING").put("id", paymentId));
+          return Future.succeededFuture(
+            new JsonObject().put("status", "PENDING").put("id", paymentId));
         }
         return paymentRepository.getPaymentStatus(paymentId, userId);
       })
       .onSuccess(result -> {
-        if (result == null) {
-          replyError(ctx, 404, "Payment not found");
-          return;
-        }
-        ctx.response()
-          .putHeader("Content-Type", "application/json")
-          .end(result.encode());
+        if (result == null) { replyError(ctx, 404, "Payment not found"); return; }
+        ctx.response().putHeader("Content-Type", "application/json").end(result.encode());
       })
       .onFailure(err -> {
         log.error("Status check failed for payment {}", paymentId, err);
@@ -189,13 +153,10 @@ public class PaymentHandler {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // GET /payments/recipients
-  // -------------------------------------------------------------------------
+  // ── GET /payments/recipients ──────────────────────────────────────────────
 
   public void getRecipients(RoutingContext ctx) {
     String userId = ctx.user().subject();
-
     paymentRepository.getRecipients(userId)
       .onSuccess(recipients -> ctx.response()
         .putHeader("Content-Type", "application/json")
@@ -206,16 +167,15 @@ public class PaymentHandler {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // PUT /payments/recipients/:id
-  // -------------------------------------------------------------------------
+  // ── PUT /payments/recipients/:id ─────────────────────────────────────────
 
   public void updateRecipient(RoutingContext ctx) {
     String recipientId = ctx.pathParam("id");
     String userId      = ctx.user().subject();
     JsonObject updates = ctx.body().asJsonObject();
 
-    if (updates == null || (updates.getString("nickname") == null && updates.getString("defaultCategory") == null)) {
+    if (updates == null ||
+      (updates.getString("nickname") == null && updates.getString("defaultCategory") == null)) {
       replyError(ctx, 400, "Provide nickname or defaultCategory to update");
       return;
     }
@@ -228,9 +188,7 @@ public class PaymentHandler {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // GET /health
-  // -------------------------------------------------------------------------
+  // ── GET /health ───────────────────────────────────────────────────────────
 
   public void healthCheck(RoutingContext ctx) {
     ctx.response()
@@ -238,39 +196,34 @@ public class PaymentHandler {
       .end(new JsonObject().put("status", "UP").put("service", "payment-service").encode());
   }
 
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
+  // ── Private helpers ───────────────────────────────────────────────────────
 
-  /** Calls budget-service to check if this spend is within the user's budget. */
   private Future<Boolean> checkBudgetAffordability(String userId, String category, double amount) {
     String url = budgetServiceUrl + "/budgets/" + category + "/check?amount=" + (int) amount;
-
     return webClient.getAbs(url)
-      .putHeader("X-User-Id", userId)  // budget-service reads user from this header (internal call)
+      .putHeader("X-User-Id", userId)
       .send()
       .map(response -> {
-        if (response.statusCode() != 200) return true; // fail open — don't block payment on budget service errors
+        if (response.statusCode() != 200) return true;
         return response.bodyAsJsonObject().getBoolean("canAfford", true);
       })
       .recover(err -> {
-        // If budget service is down, let the payment proceed — money > budgets
         log.warn("Budget check failed, allowing payment: {}", err.getMessage());
         return Future.succeededFuture(true);
       });
   }
 
   private Future<JsonObject> fireStkPush(JsonObject body, double amount) {
-    String phone       = body.getString("phone");
-    String accountRef  = body.getString("accountReference", "Akiba");
-    String description = body.getString("description", "Akiba Payment");
-
-    // M-Pesa only accepts whole numbers for amount
-    return darajaService.initiateStkPush(phone, (int) amount, accountRef, description);
+    return darajaService.initiateStkPush(
+      body.getString("phone"),
+      (int) amount,
+      body.getString("accountReference", "Akiba"),
+      body.getString("description", "Akiba Payment"));
   }
 
   private Future<Void> saveAndRespond(
-      RoutingContext ctx, String userId, JsonObject body, double amount, JsonObject darajaResponse) {
+    RoutingContext ctx, String userId, JsonObject body,
+    double amount, JsonObject darajaResponse) {
 
     String checkoutId = darajaResponse.getString("CheckoutRequestID");
 
@@ -286,16 +239,11 @@ public class PaymentHandler {
       .put("checkoutId", checkoutId);
 
     return paymentRepository.createPayment(payment)
+      .compose(paymentId ->
+        redis.setex(PENDING_KEY_PREFIX + paymentId, String.valueOf(PENDING_TTL_SECONDS), "PENDING")
+          .map(paymentId))
       .compose(paymentId -> {
-        // Cache pending state in Redis — the poll endpoint reads this
-        return redis.setex(PENDING_KEY_PREFIX + paymentId, String.valueOf(PENDING_TTL_SECONDS), "PENDING")
-          .map(paymentId);
-      })
-      .compose(paymentId -> {
-        // Fire-and-forget: upsert recipient (don't fail the payment if this fails)
         upsertRecipientSilently(userId, body);
-
-        // Respond immediately — mobile app will poll for the outcome
         ctx.response()
           .setStatusCode(202)
           .putHeader("Content-Type", "application/json")
@@ -304,55 +252,41 @@ public class PaymentHandler {
             .put("status", "PENDING")
             .put("message", "Check your phone for M-Pesa prompt")
             .encode());
-
         return Future.succeededFuture();
       });
   }
 
   private void upsertRecipientSilently(String userId, JsonObject body) {
-    JsonObject recipient = new JsonObject()
-      .put("userId", userId)
-      .put("identifier", body.getString("recipient_identifier"))
-      .put("recipientType", body.getString("recipient_type"))
-      .put("nickname", body.getString("nickname"))
-      .put("category", body.getString("category"));
-
-    paymentRepository.upsertRecipient(recipient)
+    paymentRepository.upsertRecipient(new JsonObject()
+        .put("userId", userId)
+        .put("identifier", body.getString("recipient_identifier"))
+        .put("recipientType", body.getString("recipient_type"))
+        .put("nickname", body.getString("nickname"))
+        .put("category", body.getString("category")))
       .onFailure(err -> log.warn("Failed to upsert recipient (non-critical): {}", err.getMessage()));
   }
 
   private Future<Void> clearPendingCache(String checkoutId) {
-    // We need the paymentId to clear its Redis key — look it up via checkoutId
-    // For simplicity, we store both: "checkout:{checkoutId}" → paymentId when we save
-    // TODO: store checkout→payment mapping in Redis during saveAndRespond
-    return Future.succeededFuture(); // placeholder — see TODO above
+    // TODO: store "checkout:{checkoutId}" → paymentId in Redis during saveAndRespond
+    // then del that key here so the poll endpoint stops returning PENDING
+    return Future.succeededFuture();
   }
 
-  private Future<Void> fetchAndPublishEvent(String checkoutId, String status) {
-    // Build RabbitMQ event for budget-service and notification-service
+  private Future<Void> publishEvent(String checkoutId, String status) {
     JsonObject event = new JsonObject()
       .put("checkoutId", checkoutId)
       .put("status", status)
       .put("timestamp", System.currentTimeMillis());
 
-    return rabbitMQ.basicPublish("", PAYMENT_COMPLETED_QUEUE,
-        new io.vertx.rabbitmq.RabbitMQMessage() {
-          @Override public io.vertx.core.buffer.Buffer body() {
-            return io.vertx.core.buffer.Buffer.buffer(event.encode());
-          }
-          // Other interface methods return null (not used for basic publish)
-          @Override public com.rabbitmq.client.Envelope envelope() { return null; }
-          @Override public com.rabbitmq.client.AMQP.BasicProperties properties() { return null; }
-          @Override public String consumerTag() { return null; }
-        })
-      .mapEmpty();
+    // Vert.x 5: basicPublish takes (exchange, routingKey, BasicProperties, Buffer)
+    // Pass null for BasicProperties to use defaults
+    return rabbitMQ.basicPublish("", PAYMENT_COMPLETED_QUEUE, null,
+      Buffer.buffer(event.encode()));
   }
 
-  /** Extracts the M-Pesa receipt number from the callback metadata array. */
   private String extractMpesaReceipt(JsonObject stk) {
     var metadata = stk.getJsonObject("CallbackMetadata");
     if (metadata == null) return null;
-
     for (Object item : metadata.getJsonArray("Item", new io.vertx.core.json.JsonArray())) {
       JsonObject entry = (JsonObject) item;
       if ("MpesaReceiptNumber".equals(entry.getString("Name"))) {
@@ -365,11 +299,8 @@ public class PaymentHandler {
   private int intParam(RoutingContext ctx, String param, int defaultValue) {
     String value = ctx.queryParam(param).stream().findFirst().orElse(null);
     if (value == null) return defaultValue;
-    try {
-      return Integer.parseInt(value);
-    } catch (NumberFormatException e) {
-      return defaultValue;
-    }
+    try { return Integer.parseInt(value); }
+    catch (NumberFormatException e) { return defaultValue; }
   }
 
   private void replyError(RoutingContext ctx, int status, String message) {

@@ -1,10 +1,8 @@
 package com.akiba.payments.verticles;
 
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.SqlClient;
+import io.vertx.core.VerticleBase;
+import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,30 +10,28 @@ import org.slf4j.LoggerFactory;
  * Runs once on startup to ensure our DB tables exist.
  * Separating schema setup from business logic keeps MainVerticle clean.
  */
-public class SchemaVerticle extends AbstractVerticle {
+public class SchemaVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(SchemaVerticle.class);
 
-  private final PgPool pgPool;
+  // Vert.x 5: PgPool is removed — use Pool from vertx-sql-client
+  private final Pool pool;
 
-  public SchemaVerticle(PgPool pgPool) {
-    this.pgPool = pgPool;
+  public SchemaVerticle(Pool pool) {
+    this.pool = pool;
   }
 
   @Override
-  public void start(Promise<Void> startPromise) {
-    createSchema()
+  public Future<?> start() {
+    return createSchema()
       .compose(v -> createPaymentsTable())
       .compose(v -> createRecipientsTable())
-      .onSuccess(v -> {
-        log.info("Payment schema ready");
-        startPromise.complete();
-      })
-      .onFailure(startPromise::fail);
+      .onSuccess(v -> log.info("Payment schema ready"))
+      .onFailure(err -> log.error("Payment schema setup failed", err));
   }
 
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS payments")
+    return pool.query("CREATE SCHEMA IF NOT EXISTS payments")
       .execute()
       .mapEmpty();
   }
@@ -47,29 +43,28 @@ public class SchemaVerticle extends AbstractVerticle {
         user_id         UUID        NOT NULL,
         phone           VARCHAR(20) NOT NULL,
         amount          NUMERIC(12,2) NOT NULL,
-        recipient_type  VARCHAR(10) NOT NULL,       -- PHONE | TILL | PAYBILL
+        recipient_type  VARCHAR(10) NOT NULL,
         recipient_id    VARCHAR(50) NOT NULL,
         category        VARCHAR(50) NOT NULL,
         description     TEXT,
         account_ref     VARCHAR(50),
-        status          VARCHAR(10) NOT NULL DEFAULT 'PENDING',  -- PENDING | COMPLETED | FAILED
-        checkout_id     VARCHAR(100),               -- M-Pesa CheckoutRequestID
-        mpesa_receipt   VARCHAR(50),                -- returned on COMPLETED
+        status          VARCHAR(10) NOT NULL DEFAULT 'PENDING',
+        checkout_id     VARCHAR(100),
+        mpesa_receipt   VARCHAR(50),
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
       """;
-    return pgPool.query(sql).execute().mapEmpty();
+    return pool.query(sql).execute().mapEmpty();
   }
 
   private Future<Void> createRecipientsTable() {
-    // Recipients are auto-saved per user so they can quickly re-pay the same person.
-    // (user_id, identifier) is unique so we can UPSERT without duplicates.
+    // (user_id, identifier) is unique so we can UPSERT without duplicates
     String sql = """
       CREATE TABLE IF NOT EXISTS payments.recipients (
         id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id           UUID        NOT NULL,
-        identifier        VARCHAR(50) NOT NULL,   -- phone number, till, or paybill
+        identifier        VARCHAR(50) NOT NULL,
         recipient_type    VARCHAR(10) NOT NULL,
         nickname          VARCHAR(100),
         default_category  VARCHAR(50),
@@ -79,6 +74,6 @@ public class SchemaVerticle extends AbstractVerticle {
         UNIQUE (user_id, identifier)
       )
       """;
-    return pgPool.query(sql).execute().mapEmpty();
+    return pool.query(sql).execute().mapEmpty();
   }
 }

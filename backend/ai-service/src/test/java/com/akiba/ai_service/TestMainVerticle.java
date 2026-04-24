@@ -1,6 +1,6 @@
 package com.akiba.ai_service;
 
-import com.akiba.ai.MainVerticle;
+import com.akiba.ai.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

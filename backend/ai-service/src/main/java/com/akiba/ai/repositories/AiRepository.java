@@ -6,7 +6,6 @@ import com.akiba.ai.models.Report;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,12 +18,13 @@ import java.util.UUID;
 /**
  * AiRepository owns every SQL statement for the ai.* schema.
  *
- * Single-responsibility: this class does nothing but talk to the
- * database. Business logic lives in the service/handler layers.
- *
- * NOTE: Uses io.vertx.sqlclient.Pool (the Vert.x 5 unified interface)
- * instead of the old PgPool — PgPool still exists but Pool is the
- * preferred type for injection so tests can swap in any driver.
+ * Vert.x 5 changes:
+ *   - Field type changed from PgPool → Pool (io.vertx.sqlclient.Pool).
+ *     Pool is the Vert.x 5 unified interface — PgPool now extends Pool,
+ *     so accepting Pool here makes the repository testable with any
+ *     SQL backend and avoids importing the Postgres-specific type.
+ *   - SMALLINT columns (month, year) require short in Tuple, not int.
+ *     Passing int to a SMALLINT param throws a codec error in v5 strict mode.
  */
 public class AiRepository {
 
@@ -52,9 +52,7 @@ public class AiRepository {
       ).execute(Tuple.of(userId))
       .map(rows -> {
         List<Conversation> list = new ArrayList<>();
-        for (Row row : rows) {
-          list.add(rowToConversation(row));
-        }
+        rows.forEach(row -> list.add(rowToConversation(row)));
         return list;
       });
   }
@@ -70,8 +68,10 @@ public class AiRepository {
   }
 
   /**
-   * Fetches the most recent N messages for a conversation.
-   * We cap at 20 so we don't blow Gemini's context window or inflate costs.
+   * Returns the most recent `limit` messages in chronological order.
+   * Subquery fetches newest-first (DESC), outer query re-sorts oldest-first (ASC)
+   * so Gemini receives history in the correct temporal order.
+   * Capped at 20 to keep context window costs reasonable.
    */
   public Future<List<Message>> findRecentMessages(UUID conversationId, int limit) {
     return pool.preparedQuery(
@@ -82,9 +82,7 @@ public class AiRepository {
       ).execute(Tuple.of(conversationId, limit))
       .map(rows -> {
         List<Message> list = new ArrayList<>();
-        for (Row row : rows) {
-          list.add(rowToMessage(row));
-        }
+        rows.forEach(row -> list.add(rowToMessage(row)));
         return list;
       });
   }
@@ -92,10 +90,12 @@ public class AiRepository {
   // ── Reports ────────────────────────────────────────────────────────────────
 
   public Future<Report> createReport(UUID userId, int month, int year) {
+    // Cast to short — Postgres SMALLINT requires a 16-bit integer.
+    // Vert.x 5 enforces strict type matching; passing int causes a codec error.
     return pool.preparedQuery(
         "INSERT INTO ai.reports (id, user_id, month, year, status, created_at) " +
           "VALUES ($1, $2, $3, $4, 'GENERATING', NOW()) RETURNING *"
-      ).execute(Tuple.of(UUID.randomUUID(), userId, month, year))
+      ).execute(Tuple.of(UUID.randomUUID(), userId, (short) month, (short) year))
       .map(rows -> rowToReport(rows.iterator().next()));
   }
 
@@ -109,7 +109,7 @@ public class AiRepository {
   public Future<Report> findReport(UUID userId, int month, int year) {
     return pool.preparedQuery(
         "SELECT * FROM ai.reports WHERE user_id = $1 AND month = $2 AND year = $3"
-      ).execute(Tuple.of(userId, month, year))
+      ).execute(Tuple.of(userId, (short) month, (short) year))
       .map(rows -> rows.rowCount() == 0 ? null : rowToReport(rows.iterator().next()));
   }
 
@@ -139,8 +139,8 @@ public class AiRepository {
     Report r = new Report();
     r.id        = row.getUUID("id");
     r.userId    = row.getUUID("user_id");
-    r.month     = row.getInteger("month");
-    r.year      = row.getInteger("year");
+    r.month     = row.getShort("month");   // SMALLINT → getShort(), not getInteger()
+    r.year      = row.getShort("year");
     r.content   = row.getString("content");
     r.status    = row.getString("status");
     r.createdAt = row.getLocalDateTime("created_at").toInstant(ZoneOffset.UTC);

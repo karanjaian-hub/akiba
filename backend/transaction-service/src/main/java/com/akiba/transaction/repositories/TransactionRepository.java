@@ -24,6 +24,12 @@ public class TransactionRepository {
    * Using a prepared statement in a loop is safe — Vert.x batches these efficiently.
    */
   public Future<Void> bulkInsert(String userId, JsonArray transactions) {
+
+    // Defensive check — handler should have caught this, but guard anyway
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+
     String sql = """
                 INSERT INTO transactions.records
                     (user_id, date, amount, type, merchant, category, source, reference, raw_text, anomalous)
@@ -62,6 +68,10 @@ public class TransactionRepository {
     String category, String dateFrom, String dateTo,
     String type, String source) {
 
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+
     String sql = """
                 SELECT id, date, amount, type, merchant, category, source, reference, anomalous, created_at
                 FROM transactions.records
@@ -93,6 +103,13 @@ public class TransactionRepository {
   }
 
   public Future<JsonObject> findById(String userId, String transactionId) {
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+    if (transactionId == null || transactionId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("transactionId must not be null or blank"));
+    }
+
     String sql = """
                 SELECT id, date, amount, type, merchant, category, source, reference, raw_text, anomalous, created_at
                 FROM transactions.records
@@ -108,6 +125,16 @@ public class TransactionRepository {
   }
 
   public Future<Void> updateCategory(String userId, String transactionId, String newCategory) {
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+    if (transactionId == null || transactionId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("transactionId must not be null or blank"));
+    }
+    if (newCategory == null || newCategory.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("newCategory must not be null or blank"));
+    }
+
     String sql = """
                 UPDATE transactions.records
                 SET category = $1
@@ -123,6 +150,10 @@ public class TransactionRepository {
    * Summary: this month's income total, expense total, and top 5 categories by spend.
    */
   public Future<JsonObject> getSummary(String userId) {
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+
     String sql = """
                 SELECT
                     SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END) AS total_income,
@@ -167,6 +198,10 @@ public class TransactionRepository {
   }
 
   public Future<JsonArray> getTopMerchants(String userId) {
+    if (userId == null || userId.isBlank()) {
+      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
+    }
+
     String sql = """
                 SELECT merchant, SUM(amount) AS total, COUNT(*) AS tx_count
                 FROM transactions.records

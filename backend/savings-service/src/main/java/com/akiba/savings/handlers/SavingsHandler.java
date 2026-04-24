@@ -3,6 +3,7 @@ package com.akiba.savings.handlers;
 import com.akiba.savings.models.SavingsGoal;
 import com.akiba.savings.repositories.SavingsRepository;
 import io.vertx.core.Future;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
@@ -32,16 +33,10 @@ public class SavingsHandler {
     this.rabbitMQ   = rabbitMQ;
   }
 
-  // ── GET /savings/goals ───────────────────────────────────────────────────
+  // ── GET /savings/goals ────────────────────────────────────────────────────
 
-  /**
-   * Returns all active goals with computed progress fields.
-   * Checks Redis per-goal before hitting the DB — goals change infrequently
-   * so this cache cuts DB load significantly for users who check often.
-   */
   public void getGoals(RoutingContext ctx) {
     String userId = ctx.user().subject();
-
     repository.getActiveGoals(userId)
       .compose(goalRows -> enrichGoalsFromCache(userId, goalRows))
       .onSuccess(goals -> ctx.response()
@@ -53,31 +48,18 @@ public class SavingsHandler {
       });
   }
 
-  /**
-   * For each goal row from DB, check if there's a fresher version in Redis.
-   * Runs all Redis checks in parallel (Future.all) then re-computes derived fields.
-   */
   private Future<JsonArray> enrichGoalsFromCache(String userId, JsonArray goalRows) {
     List<Future<JsonObject>> futures = new ArrayList<>();
-
     for (Object obj : goalRows) {
-      JsonObject row    = (JsonObject) obj;
-      String goalId     = row.getString("id");
-      String cacheKey   = CACHE_KEY_PREFIX + userId + ":" + goalId;
+      JsonObject row  = (JsonObject) obj;
+      String goalId   = row.getString("id");
+      String cacheKey = CACHE_KEY_PREFIX + userId + ":" + goalId;
 
-      Future<JsonObject> enriched = redis.get(cacheKey)
-        .map(cached -> {
-          JsonObject data = cached != null
-            ? new JsonObject(cached.toString())
-            : row;
-          // Always re-compute derived fields so they reflect today's date
-          return SavingsGoal.fromJson(data).toJson();
-        })
-        .recover(err -> Future.succeededFuture(SavingsGoal.fromJson(row).toJson()));
-
-      futures.add(enriched);
+      futures.add(redis.get(cacheKey)
+        .map(cached -> SavingsGoal.fromJson(cached != null
+          ? new JsonObject(cached.toString()) : row).toJson())
+        .recover(err -> Future.succeededFuture(SavingsGoal.fromJson(row).toJson())));
     }
-
     return Future.all(futures).map(results -> {
       JsonArray enriched = new JsonArray();
       results.list().forEach(r -> enriched.add((JsonObject) r));
@@ -85,15 +67,15 @@ public class SavingsHandler {
     });
   }
 
-  // ── POST /savings/goals ──────────────────────────────────────────────────
+  // ── POST /savings/goals ───────────────────────────────────────────────────
 
   public void createGoal(RoutingContext ctx) {
     JsonObject body   = ctx.body().asJsonObject();
     String     userId = ctx.user().subject();
 
     if (body == null || body.getString("name") == null
-        || body.getDouble("targetAmount") == null
-        || body.getString("deadline") == null) {
+      || body.getDouble("targetAmount") == null
+      || body.getString("deadline") == null) {
       replyError(ctx, 400, "name, targetAmount, and deadline are required");
       return;
     }
@@ -109,17 +91,14 @@ public class SavingsHandler {
       });
   }
 
-  // ── PUT /savings/goals/:id ───────────────────────────────────────────────
+  // ── PUT /savings/goals/:id ────────────────────────────────────────────────
 
   public void updateGoal(RoutingContext ctx) {
-    String goalId = ctx.pathParam("id");
-    String userId = ctx.user().subject();
+    String goalId  = ctx.pathParam("id");
+    String userId  = ctx.user().subject();
     JsonObject updates = ctx.body().asJsonObject();
 
-    if (updates == null) {
-      replyError(ctx, 400, "Request body required");
-      return;
-    }
+    if (updates == null) { replyError(ctx, 400, "Request body required"); return; }
 
     repository.updateGoal(goalId, userId, updates)
       .compose(v -> invalidateCache(userId, goalId))
@@ -130,7 +109,7 @@ public class SavingsHandler {
       });
   }
 
-  // ── DELETE /savings/goals/:id ────────────────────────────────────────────
+  // ── DELETE /savings/goals/:id ─────────────────────────────────────────────
 
   public void archiveGoal(RoutingContext ctx) {
     String goalId = ctx.pathParam("id");
@@ -145,11 +124,11 @@ public class SavingsHandler {
       });
   }
 
-  // ── POST /savings/goals/:id/contribute ──────────────────────────────────
+  // ── POST /savings/goals/:id/contribute ───────────────────────────────────
 
   public void addManualContribution(RoutingContext ctx) {
-    String goalId = ctx.pathParam("id");
-    String userId = ctx.user().subject();
+    String goalId   = ctx.pathParam("id");
+    String userId   = ctx.user().subject();
     JsonObject body = ctx.body().asJsonObject();
 
     if (body == null || body.getDouble("amount") == null) {
@@ -164,18 +143,14 @@ public class SavingsHandler {
       .compose(v -> repository.getGoalById(goalId, userId))
       .compose(goalJson -> {
         if (goalJson == null) return Future.succeededFuture(null);
-
         SavingsGoal goal = SavingsGoal.fromJson(goalJson);
-
-        // Publish alert if this contribution just completed the goal
         if (goal.currentAmount >= goal.targetAmount) {
           publishAlert(new JsonObject()
-            .put("type",     "GOAL_COMPLETED")
-            .put("userId",   userId)
-            .put("goalId",   goalId)
+            .put("type", "GOAL_COMPLETED")
+            .put("userId", userId)
+            .put("goalId", goalId)
             .put("goalName", goal.name));
         }
-
         return invalidateCache(userId, goalId).map(goal.toJson());
       })
       .onSuccess(goal -> ctx.response()
@@ -187,7 +162,7 @@ public class SavingsHandler {
       });
   }
 
-  // ── GET /savings/goals/:id/history ──────────────────────────────────────
+  // ── GET /savings/goals/:id/history ────────────────────────────────────────
 
   public void getContributionHistory(RoutingContext ctx) {
     String goalId = ctx.pathParam("id");
@@ -203,7 +178,7 @@ public class SavingsHandler {
       });
   }
 
-  // ── GET /health ──────────────────────────────────────────────────────────
+  // ── GET /health ───────────────────────────────────────────────────────────
 
   public void healthCheck(RoutingContext ctx) {
     ctx.response()
@@ -211,24 +186,16 @@ public class SavingsHandler {
       .end(new JsonObject().put("status", "UP").put("service", "savings-service").encode());
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Bust the Redis cache for a goal after any write operation. */
   private Future<Void> invalidateCache(String userId, String goalId) {
     return redis.del(List.of(CACHE_KEY_PREFIX + userId + ":" + goalId)).mapEmpty();
   }
 
   private void publishAlert(JsonObject alert) {
-    rabbitMQ.basicPublish("", ALERTS_QUEUE,
-        new io.vertx.rabbitmq.RabbitMQMessage() {
-          @Override public io.vertx.core.buffer.Buffer body() {
-            return io.vertx.core.buffer.Buffer.buffer(alert.encode());
-          }
-          @Override public com.rabbitmq.client.Envelope envelope() { return null; }
-          @Override public com.rabbitmq.client.AMQP.BasicProperties properties() { return null; }
-          @Override public String consumerTag() { return null; }
-        })
-      .onFailure(err -> log.warn("Failed to publish savings alert (non-critical): {}", err.getMessage()));
+    // Vert.x 5: basicPublish(exchange, routingKey, BasicProperties, Buffer)
+    rabbitMQ.basicPublish("", ALERTS_QUEUE, null, Buffer.buffer(alert.encode()))
+      .onFailure(err -> log.warn("Failed to publish savings alert: {}", err.getMessage()));
   }
 
   private void replyError(RoutingContext ctx, int status, String message) {

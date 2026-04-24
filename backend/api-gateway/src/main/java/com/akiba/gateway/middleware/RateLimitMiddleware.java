@@ -1,18 +1,20 @@
 package com.akiba.gateway.middleware;
 
+import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.redis.client.RedisAPI;
 
 import java.util.List;
 
-// Redis-backed rate limiter for payment routes.
-// Allows max 5 payment requests per user per minute.
-
+/**
+ * Redis-backed rate limiter for payment routes.
+ * Max 5 payment requests per user per minute.
+ * Uses Redis INCR + EXPIRE — counter auto-resets after 60s.
+ */
 public class RateLimitMiddleware {
 
   private final RedisAPI redis;
-
   private static final int MAX_REQUESTS_PER_MINUTE = 5;
 
   public RateLimitMiddleware(RedisAPI redis) {
@@ -27,20 +29,17 @@ public class RateLimitMiddleware {
       return;
     }
 
-    // Key pattern matches the guide spec: ratelimit:{userId}:payments
     String key = "ratelimit:" + userId + ":payments";
 
     redis.incr(key)
       .compose(count -> {
         long requestCount = count.toLong();
-
         if (requestCount == 1) {
-          // First request in this window — set the 60s expiry
-          // INCR alone doesn't expire, so we set TTL on first hit
+          // In Vert.x 5 Redis client, expire takes a List<String>
           return redis.expire(List.of(key, "60"))
             .map(v -> requestCount);
         }
-        return io.vertx.core.Future.succeededFuture(requestCount);
+        return Future.succeededFuture(requestCount);
       })
       .onSuccess(count -> {
         if (count > MAX_REQUESTS_PER_MINUTE) {
@@ -50,14 +49,14 @@ public class RateLimitMiddleware {
             .putHeader("Content-Type", "application/json")
             .putHeader("Retry-After", "60")
             .end(new JsonObject()
-              .put("error", "Too many payment requests. Please wait a minute before trying again.")
+              .put("error", "Too many payment requests. Please wait a minute.")
               .encode());
           return;
         }
         ctx.next();
       })
       .onFailure(err -> {
-        // If Redis is down, fail open — don't block payments due to infra issue
+        // Fail open — don't block payments because Redis is down
         System.err.println("[RateLimitMiddleware] ❌ Redis error: " + err.getMessage());
         ctx.next();
       });

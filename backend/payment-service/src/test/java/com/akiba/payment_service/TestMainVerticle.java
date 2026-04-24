@@ -1,5 +1,6 @@
 package com.akiba.payment_service;
 
+import com.akiba.payments.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

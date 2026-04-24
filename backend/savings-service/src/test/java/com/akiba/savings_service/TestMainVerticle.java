@@ -1,5 +1,6 @@
 package com.akiba.savings_service;
 
+import com.akiba.savings.verticles.MainVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

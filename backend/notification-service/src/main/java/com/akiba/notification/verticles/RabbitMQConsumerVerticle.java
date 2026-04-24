@@ -3,19 +3,18 @@ package com.akiba.notification.verticles;
 import com.akiba.notification.handlers.AlertHandler;
 import com.akiba.notification.repositories.PreferencesRepository;
 import com.akiba.notification.services.PushNotificationService;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
+import io.vertx.core.VerticleBase;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rabbitmq.RabbitMQClient;
 
 import java.util.UUID;
 
-public class RabbitMQConsumerVerticle extends AbstractVerticle {
+public class RabbitMQConsumerVerticle extends VerticleBase {
 
-  private final RabbitMQClient         rabbit;
-  private final AlertHandler           alertHandler;
-  private final PreferencesRepository  prefsRepo;
+  private final RabbitMQClient          rabbit;
+  private final AlertHandler            alertHandler;
+  private final PreferencesRepository   prefsRepo;
   private final PushNotificationService pushService;
 
   public RabbitMQConsumerVerticle(
@@ -31,8 +30,13 @@ public class RabbitMQConsumerVerticle extends AbstractVerticle {
   }
 
   @Override
-  public void start(Promise<Void> startPromise) {
-    rabbit.start()
+  public Future<?> start() {
+    return rabbit.start()
+      .compose(v -> rabbit.queueDeclare("payment.completed", true, false, false))
+      .compose(v -> rabbit.queueDeclare("budget.alert",      true, false, false))
+      .compose(v -> rabbit.queueDeclare("savings.alert",     true, false, false))
+      .compose(v -> rabbit.queueDeclare("report.generate",   true, false, false))
+      .compose(v -> rabbit.queueDeclare("dead.letter",       true, false, false))
       .compose(v -> Future.all(
         subscribePaymentCompleted(),
         subscribeBudgetAlert(),
@@ -40,18 +44,9 @@ public class RabbitMQConsumerVerticle extends AbstractVerticle {
         subscribeReportReady(),
         subscribeDeadLetter()
       ))
-      .onSuccess(v -> {
-        System.out.println("[NotificationService] All RabbitMQ consumers running");
-        startPromise.complete();
-      })
-      .onFailure(err -> {
-        System.err.println("[NotificationService] Consumer startup failed: " + err.getMessage());
-        startPromise.fail(err);
-      });
+      .onSuccess(v -> System.out.println("[NotificationService] All RabbitMQ consumers running"))
+      .onFailure(err -> System.err.println("[NotificationService] Consumer startup failed: " + err.getMessage()));
   }
-
-  // ─── Consumers — Vert.x 5 API: basicConsumer() returns Future<RabbitMQConsumer>
-  // then attach the handler via consumer.handler(msg -> { ... })
 
   private Future<Void> subscribePaymentCompleted() {
     return rabbit.basicConsumer("payment.completed")
@@ -88,7 +83,6 @@ public class RabbitMQConsumerVerticle extends AbstractVerticle {
         JsonObject body = msg.body().toJsonObject();
         UUID userId = UUID.fromString(body.getString("user_id"));
         String type = body.getString("type");
-
         if ("GOAL_COMPLETED".equals(type)) {
           String notifBody = String.format("Congratulations! %s achieved!", body.getString("goal_name"));
           dispatchAlert(userId, "GOAL_ACHIEVED", "Goal Complete!", notifBody, "savings_enabled");
@@ -124,14 +118,10 @@ public class RabbitMQConsumerVerticle extends AbstractVerticle {
       .mapEmpty();
   }
 
-  // ─── Shared dispatch: check prefs → save to DB → push to device ──────────
-
   private void dispatchAlert(UUID userId, String type, String title, String body, String prefKey) {
     prefsRepo.getPreferences(userId)
       .compose(prefs -> {
-        boolean isEnabled = prefs.getBoolean(prefKey, true);
-        if (!isEnabled) return Future.succeededFuture();
-
+        if (!prefs.getBoolean(prefKey, true)) return Future.succeededFuture();
         return alertHandler.saveAlert(userId, type, title, body)
           .compose(saved -> pushService.send(prefs.getString("push_token"), title, body));
       })

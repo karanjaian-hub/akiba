@@ -15,18 +15,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * ReportGenerationConsumer subscribes to the "report.generate" RabbitMQ
- * queue and produces monthly financial reports using the AI.
+ * ReportGenerationConsumer subscribes to the "report.generate" RabbitMQ queue
+ * and produces monthly financial reports using the AI.
  *
- * Why RabbitMQ? Report generation is slow (~5-10 seconds). If we did
- * it synchronously in an HTTP request, the user would be staring at a
- * spinner. Instead: the user requests a report → we enqueue a job →
- * return 202 Accepted immediately → this consumer runs the AI call in
- * the background → publishes completion to the notifications queue.
- *
- * NOTE (Vert.x 5): RabbitMQPublishOptions was removed. basicPublish now
- * accepts the exchange, routing key, and Buffer directly — no options
- * object needed for the default case.
+ * Vert.x 5 changes:
+ *   - basicPublish() no longer accepts RabbitMQPublishOptions as a parameter.
+ *     The v5 signature is: basicPublish(exchange, routingKey, body) → Future<Void>.
+ *   - RabbitMQClient.start() is now called in MainVerticle before this consumer
+ *     is registered — so we can safely call basicConsumer() here without
+ *     worrying about connection state.
  */
 public class ReportGenerationConsumer {
 
@@ -55,18 +52,18 @@ public class ReportGenerationConsumer {
   }
 
   /**
-   * Registers the queue consumer. Call this once from the main verticle's start().
+   * Registers the queue consumer.
+   * Called from MainVerticle after rabbitMQ.start() has resolved.
    */
   public Future<Void> start() {
-    return rabbitMQ.start()
-      .compose(v -> rabbitMQ.queueDeclare(QUEUE_IN, true, false, false))
+    return rabbitMQ.queueDeclare(QUEUE_IN, true, false, false)
       .compose(v -> rabbitMQ.queueDeclare(QUEUE_NOTIFY, true, false, false))
       .compose(v -> rabbitMQ.basicConsumer(QUEUE_IN))
-      .compose(consumer -> {
+      .onSuccess(consumer -> {
         consumer.handler(this::handleMessage);
         log.info("Listening on RabbitMQ queue: {}", QUEUE_IN);
-        return Future.succeededFuture();
-      });
+      })
+      .mapEmpty();
   }
 
   private void handleMessage(RabbitMQMessage message) {
@@ -75,28 +72,22 @@ public class ReportGenerationConsumer {
     int        month  = body.getInteger("month");
     int        year   = body.getInteger("year");
 
-    log.info("Generating report for user {} → {}/{}", userId, month, year);
+    log.info("Generating report for user {} — {}/{}", userId, month, year);
 
     repository.createReport(userId, month, year)
       .compose(report ->
         buildReportData(userId, month, year)
           .compose(data -> generateReportWithAi(data, month, year))
-          .compose(content ->
-            repository.updateReportContent(report.id, content, "COMPLETE")
-              .compose(v -> publishCompletion(userId, report.id, month, year))
-          )
+          .compose(content -> repository.updateReportContent(report.id, content, "COMPLETE"))
+          .compose(v -> publishCompletion(userId, report.id, month, year))
           .onFailure(err -> {
             log.error("Report generation failed for user {}: {}", userId, err.getMessage());
+            // Best-effort — mark failed so the client isn't left polling GENERATING forever.
             repository.updateReportContent(report.id, null, "FAILED");
           })
       );
   }
 
-  /**
-   * Fetches transaction + budget data for the given month/year from
-   * their respective services. Uses internal HTTP (no auth needed
-   * between services on the same Docker network).
-   */
   private Future<JsonObject> buildReportData(UUID userId, int month, int year) {
     String txUrl     = TRANSACTION_BASE + "/internal/report/" + userId + "?month=" + month + "&year=" + year;
     String budgetUrl = BUDGET_BASE      + "/internal/report/" + userId + "?month=" + month + "&year=" + year;
@@ -112,29 +103,28 @@ public class ReportGenerationConsumer {
     return Future.all(txFuture, budgetFuture)
       .map(cf -> new JsonObject()
         .put("transactions", (JsonObject) cf.resultAt(0))
-        .put("budget",       (JsonObject) cf.resultAt(1))
-      );
+        .put("budget",       (JsonObject) cf.resultAt(1)));
   }
 
   private Future<String> generateReportWithAi(JsonObject data, int month, int year) {
     String systemPrompt =
-      "You are a financial analyst. Generate a clear, friendly monthly financial report " +
-        "in Markdown format. Include: Executive Summary, Income vs Expenses, Top Spending Categories, " +
-        "Budget Performance, Savings Progress, and 3 actionable recommendations. Use Ksh for amounts.";
+      "You are a financial analyst. Generate a clear, friendly monthly financial " +
+        "report in Markdown format. Include: Executive Summary, Income vs Expenses, " +
+        "Top Spending Categories, Budget Performance, Savings Progress, and 3 " +
+        "actionable recommendations. Use Ksh for all amounts.";
 
-    String userPrompt =
-      "Generate my financial report for month " + month + "/" + year +
-        " using this data:\n" + data.encodePrettily();
+    String userPrompt = "Generate my financial report for month " + month + "/" + year +
+      " using this data:\n" + data.encodePrettily();
 
     return aiProvider.complete(systemPrompt, userPrompt, List.of());
   }
 
   /**
-   * Publishes a notification so the frontend (via WebSocket / SSE) knows
-   * the report is ready.
+   * Vert.x 5 basicPublish signature:
+   *   basicPublish(exchange, routingKey, body) → Future<Void>
    *
-   * Vert.x 5 API: basicPublish(exchange, routingKey, body) — the old
-   * RabbitMQPublishOptions overload no longer exists.
+   * The RabbitMQPublishOptions overload was removed in v5. Pass an empty
+   * string for exchange to use the default direct exchange.
    */
   private Future<Void> publishCompletion(UUID userId, UUID reportId, int month, int year) {
     JsonObject notification = new JsonObject()
@@ -144,10 +134,6 @@ public class ReportGenerationConsumer {
       .put("month",    month)
       .put("year",     year);
 
-    return rabbitMQ.basicPublish(
-      "",             // default exchange
-      QUEUE_NOTIFY,   // routing key
-      Buffer.buffer(notification.encode())
-    ).mapEmpty();
+    return rabbitMQ.basicPublish("", QUEUE_NOTIFY, Buffer.buffer(notification.encode()));
   }
 }

@@ -24,6 +24,6 @@ EXPOSE 8080
 
 # Crash fast if the service is unhealthy rather than silently failing
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD wget -qO- http://localhost:8082/health
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
