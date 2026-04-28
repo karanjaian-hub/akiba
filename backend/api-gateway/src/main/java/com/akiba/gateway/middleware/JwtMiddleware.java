@@ -6,11 +6,8 @@ import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.redis.client.RedisAPI;
 
-/**
- * Verifies JWT on every protected route.
- * Checks Redis blacklist for revoked tokens (post-logout).
- * Attaches userId, role, jti, and remainingTtl to RoutingContext.
- */
+// Verifies JWT on every protected route.
+
 public class JwtMiddleware {
 
   private final JWTAuth    jwtAuth;

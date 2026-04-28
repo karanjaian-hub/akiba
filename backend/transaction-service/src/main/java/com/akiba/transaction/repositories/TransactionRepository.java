@@ -7,6 +7,8 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -19,50 +21,63 @@ public class TransactionRepository {
     this.pool = pool;
   }
 
-  /**
-   * Inserts all transactions from a parsed batch in a single round-trip.
-   * Using a prepared statement in a loop is safe — Vert.x batches these efficiently.
-   */
   public Future<Void> bulkInsert(String userId, JsonArray transactions) {
-
-    // Defensive check — handler should have caught this, but guard anyway
-    if (userId == null || userId.isBlank()) {
-      return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
-    }
-
     String sql = """
                 INSERT INTO transactions.records
                     (user_id, date, amount, type, merchant, category, source, reference, raw_text, anomalous)
-                VALUES ($1, $2::timestamp, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """;
 
     List<Tuple> batch = new ArrayList<>();
     for (int i = 0; i < transactions.size(); i++) {
       JsonObject tx = transactions.getJsonObject(i);
+
+      // Accept both "date" (RabbitMQ) and "transaction_date" (Postman)
+      String dateStr = tx.getString("date") != null
+        ? tx.getString("date")
+        : tx.getString("transaction_date");
+
+      // Accept both "rawText" (RabbitMQ) and "description" (Postman)
+      String rawText = tx.getString("rawText") != null
+        ? tx.getString("rawText")
+        : tx.getString("description");
+
+      // Vert.x PG client requires LocalDateTime — it cannot coerce a raw String.
+      // OffsetDateTime handles the trailing "Z" (UTC) that Postman sends.
+      // LocalDateTime.parse handles plain timestamps with no timezone.
+      LocalDateTime parsedDate;
+      try {
+        if (dateStr != null && (dateStr.endsWith("Z") || dateStr.contains("+"))) {
+          parsedDate = OffsetDateTime.parse(dateStr).toLocalDateTime();
+        } else if (dateStr != null) {
+          parsedDate = LocalDateTime.parse(dateStr);
+        } else {
+          return Future.failedFuture("date or transaction_date is required");
+        }
+      } catch (Exception e) {
+        return Future.failedFuture("Invalid date format: " + dateStr);
+      }
+
       batch.add(Tuple.of(
         UUID.fromString(userId),
-        tx.getString("date"),
+        parsedDate,
         tx.getDouble("amount"),
         tx.getString("type"),
         tx.getString("merchant"),
         tx.getString("category"),
         tx.getString("source"),
         tx.getString("reference"),
-        tx.getString("rawText"),
+        rawText,
         tx.getBoolean("anomalous", false)
       ));
     }
 
     return pool.preparedQuery(sql)
       .executeBatch(batch)
+      .onFailure(err -> System.err.println("[TransactionRepository] bulkInsert failed: " + err.getMessage()))
       .mapEmpty();
   }
 
-  /**
-   * Paginated query with optional filters. All filters are AND-chained.
-   * Null filters are simply ignored — no dynamic SQL string concatenation needed
-   * because we build the WHERE clause with numbered placeholders upfront.
-   */
   public Future<JsonArray> findAll(
     String userId, int page, int size,
     String category, String dateFrom, String dateTo,
@@ -146,9 +161,6 @@ public class TransactionRepository {
       .mapEmpty();
   }
 
-  /**
-   * Summary: this month's income total, expense total, and top 5 categories by spend.
-   */
   public Future<JsonObject> getSummary(String userId) {
     if (userId == null || userId.isBlank()) {
       return Future.failedFuture(new IllegalArgumentException("userId must not be null or blank"));
@@ -227,18 +239,17 @@ public class TransactionRepository {
       });
   }
 
-  // Maps a database Row to a JsonObject — keeps all SQL column names in one place
   private JsonObject rowToJson(Row row) {
     return new JsonObject()
-      .put("id",         row.getUUID("id").toString())
-      .put("date",       row.getLocalDateTime("date").toString())
-      .put("amount",     row.getDouble("amount"))
-      .put("type",       row.getString("type"))
-      .put("merchant",   row.getString("merchant"))
-      .put("category",   row.getString("category"))
-      .put("source",     row.getString("source"))
-      .put("reference",  row.getString("reference"))
-      .put("anomalous",  row.getBoolean("anomalous"))
-      .put("createdAt",  row.getLocalDateTime("created_at").toString());
+      .put("id",        row.getUUID("id").toString())
+      .put("date",      row.getLocalDateTime("date").toString())
+      .put("amount",    row.getDouble("amount"))
+      .put("type",      row.getString("type"))
+      .put("merchant",  row.getString("merchant"))
+      .put("category",  row.getString("category"))
+      .put("source",    row.getString("source"))
+      .put("reference", row.getString("reference"))
+      .put("anomalous", row.getBoolean("anomalous"))
+      .put("createdAt", row.getLocalDateTime("created_at").toString());
   }
 }

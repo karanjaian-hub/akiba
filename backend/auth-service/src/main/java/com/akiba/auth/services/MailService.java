@@ -25,7 +25,7 @@ public class MailService {
     this.mailClient = MailClient.create(vertx, config);
   }
 
-  // ─── Email Verification OTP ───────────────────────────────────────────────
+  // Sending Email Verification OTP
 
   public Future<Void> sendVerificationOtp(String toEmail, String fullName, String otp) {
     MailMessage message = new MailMessage()
@@ -41,7 +41,7 @@ public class MailService {
       .mapEmpty();
   }
 
-  // ─── Password Reset OTP ───────────────────────────────────────────────────
+  // Password Reset OTP
 
   public Future<Void> sendPasswordResetOtp(String toEmail, String fullName, String otp) {
     MailMessage message = new MailMessage()
@@ -57,7 +57,7 @@ public class MailService {
       .mapEmpty();
   }
 
-  // ─── Templates ────────────────────────────────────────────────────────────
+  // Templates
 
   private String verificationOtpHtml(String fullName, String otp) {
     return """

@@ -45,9 +45,9 @@ public class HttpVerticle extends VerticleBase {
 
     router.get("/health").handler(parseHandler::handleHealth);
 
-    router.route("/parse/*").handler(JWTAuthHandler.create(jwtAuth));
-    router.post("/parse/mpesa").handler(parseHandler::handleMpesaParse);
-    router.post("/parse/bank").handler(parseHandler::handleBankParse);
+    router.route("/*").handler(JWTAuthHandler.create(jwtAuth));
+    router.post("/mpesa").handler(parseHandler::handleMpesaParse);
+    router.post("/bank").handler(parseHandler::handleBankParse);
 
     return router;
   }

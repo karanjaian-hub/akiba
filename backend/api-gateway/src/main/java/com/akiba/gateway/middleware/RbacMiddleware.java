@@ -6,10 +6,7 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
-/**
- * Checks the authenticated user has the required permission for a route.
- * Usage: .handler(rbac.requirePermission("payments:send"))
- */
+// Checks the authenticated user has the required permission for a route.
 public class RbacMiddleware {
 
   public Handler<RoutingContext> requirePermission(String requiredPermission) {

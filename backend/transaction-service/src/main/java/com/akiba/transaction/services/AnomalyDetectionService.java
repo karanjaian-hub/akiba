@@ -17,13 +17,8 @@ public class AnomalyDetectionService {
     this.pool = pool;
   }
 
-  /**
-   * Flags a transaction as anomalous if its amount > 3x the user's
-   * average spend in that category over the last 30 days.
-   *
-   * We fetch ALL category averages in a single query, then apply
-   * the rule in memory — avoids N database calls for N transactions.
-   */
+// Flags a transaction as anomalous if its amount is 3x greater than the user's
+// average spend in that category over the last 30 days.
   public Future<JsonArray> flagAnomalies(String userId, JsonArray transactions) {
     return fetchCategoryAverages(userId)
       .map(averages -> applyAnomalyFlags(transactions, averages));
@@ -69,8 +64,7 @@ public class AnomalyDetectionService {
       }
 
       Double avg = categoryAverages.getDouble(category);
-      // If no historical average exists (new user, new category), we can't flag anything —
-      // better to have a false negative than a false positive on day one.
+      // If no historical average exists (new user, new category), we can't flag anything
       boolean isAnomalous = avg != null && amount > (avg * 3.0);
       tx.put("anomalous", isAnomalous);
       result.add(tx);

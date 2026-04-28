@@ -6,7 +6,6 @@ import io.vertx.sqlclient.Pool;
 
 public class SchemaVerticle extends VerticleBase {
 
-  // Pool is the Vert.x 5 interface — PgPool is deprecated and removed from direct use
   private final Pool pool;
 
   public SchemaVerticle(Pool pool) {

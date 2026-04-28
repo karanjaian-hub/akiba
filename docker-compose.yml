@@ -1,14 +1,3 @@
-# .env.example
-# JWT_SECRET=your_jwt_secret
-# SMTP_HOST=smtp.example.com
-# SMTP_PORT=587
-# SMTP_USERNAME=your_smtp_username
-# SMTP_PASSWORD=your_smtp_password
-# SMTP_FROM=noreply@akiba.app
-# AT_API_KEY=your_africas_talking_api_key
-# AT_USERNAME=your_africas_talking_username
-# GEMINI_API_KEY=your_gemini_api_key
-
 networks:
   akiba-network:
     driver: bridge
@@ -30,7 +19,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: on-failure
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -40,11 +29,12 @@ services:
     networks:
       - akiba-network
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: on-failure
 
   redis:
     image: redis:7-alpine
@@ -57,7 +47,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: on-failure
 
   # ─── Application Services ─────────────────────────────────────
   pdf-helper:
@@ -67,7 +57,7 @@ services:
       - "8099:8099"
     networks:
       - akiba-network
-    restart: unless-stopped
+    restart: on-failure
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8099/health')\""]
       interval: 30s
@@ -107,7 +97,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   transaction-service:
     build: ./backend/transaction-service
@@ -132,7 +122,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   parsing-service:
     build: ./backend/parsing-service
@@ -163,7 +153,7 @@ services:
         condition: service_healthy
       pdf-helper:
         condition: service_started
-    restart: unless-stopped
+    restart: on-failure
 
   ai-service:
     build: ./backend/ai-service
@@ -189,7 +179,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   payment-service:
     build: ./backend/payment-service
@@ -205,6 +195,11 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET}
       SERVICE_PORT: 8085
+      DARAJA_CONSUMER_KEY: ${DARAJA_CONSUMER_KEY}
+      DARAJA_CONSUMER_SECRET: ${DARAJA_CONSUMER_SECRET}
+      DARAJA_SHORTCODE: ${DARAJA_SHORTCODE}
+      DARAJA_PASSKEY: ${DARAJA_PASSKEY}
+      DARAJA_CALLBACK_URL: ${DARAJA_CALLBACK_URL}
     networks:
       - akiba-network
     depends_on:
@@ -214,7 +209,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   budget-service:
     build: ./backend/budget-service
@@ -239,7 +234,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   savings-service:
     build: ./backend/savings-service
@@ -264,7 +259,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   notification-service:
     build: ./backend/notification-service
@@ -289,7 +284,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure
 
   # ─── API Gateway (depends on all app services) ────────────────
   api-gateway:
@@ -333,8 +328,7 @@ services:
         condition: service_started
       pdf-helper:
         condition: service_started
-    restart: unless-stopped
-
+    restart: on-failure
 
 
 #
@@ -359,7 +353,7 @@ services:
 #      interval: 10s
 #      timeout: 5s
 #      retries: 5
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  rabbitmq:
 #    image: rabbitmq:3-management
@@ -369,11 +363,11 @@ services:
 #    networks:
 #      - akiba-network
 #    healthcheck:
-#      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+#      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
 #      interval: 10s
 #      timeout: 5s
 #      retries: 5
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  redis:
 #    image: redis:7-alpine
@@ -386,7 +380,7 @@ services:
 #      interval: 10s
 #      timeout: 5s
 #      retries: 5
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  # ─── Application Services ─────────────────────────────────────
 #  auth-service:
@@ -422,7 +416,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  transaction-service:
 #    build: ./backend/transaction-service
@@ -447,7 +441,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  parsing-service:
 #    build: ./backend/parsing-service
@@ -473,7 +467,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  ai-service:
 #    build: ./backend/ai-service
@@ -499,7 +493,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  payment-service:
 #    build: ./backend/payment-service
@@ -524,7 +518,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  budget-service:
 #    build: ./backend/budget-service
@@ -549,7 +543,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  savings-service:
 #    build: ./backend/savings-service
@@ -574,7 +568,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  notification-service:
 #    build: ./backend/notification-service
@@ -599,7 +593,7 @@ services:
 #        condition: service_healthy
 #      redis:
 #        condition: service_healthy
-#    restart: unless-stopped
+#    restart: on-failure
 #
 #  # ─── API Gateway (depends on all app services) ────────────────
 #  api-gateway:
@@ -645,7 +639,7 @@ services:
 #      - "8099:8099"
 #    networks:
 #      - akiba-network
-#    restart: unless-stopped
+#    restart: on-failure
 #    healthcheck:
 #      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
 #      interval: 30s

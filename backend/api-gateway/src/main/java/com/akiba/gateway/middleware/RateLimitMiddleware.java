@@ -7,11 +7,8 @@ import io.vertx.redis.client.RedisAPI;
 
 import java.util.List;
 
-/**
- * Redis-backed rate limiter for payment routes.
- * Max 5 payment requests per user per minute.
- * Uses Redis INCR + EXPIRE — counter auto-resets after 60s.
- */
+//  Redis-backed rate limiter for payment routes.
+// Max 5 payment requests per user per minute.
 public class RateLimitMiddleware {
 
   private final RedisAPI redis;

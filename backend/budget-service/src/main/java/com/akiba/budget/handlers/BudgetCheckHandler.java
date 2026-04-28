@@ -17,23 +17,27 @@ public class BudgetCheckHandler {
         this.cacheService = cacheService;
     }
 
-    public void handle(RoutingContext ctx) {
-        String userId   = ctx.get("userId");
-        String category = ctx.pathParam("category");
-        String amountStr = ctx.request().getParam("amount");
+  public void handle(RoutingContext ctx) {
+    String userId    = ctx.request().getParam("userId");
+    String category  = ctx.pathParam("category");
+    String amountStr = ctx.request().getParam("amount");
 
-        if (amountStr == null) {
-            ctx.response().setStatusCode(400).end("{\"error\":\"amount query param is required\"}");
-            return;
-        }
+    if (userId == null || userId.isBlank()) {
+      ctx.response().setStatusCode(400).end("{\"error\":\"userId query param is required\"}");
+      return;
+    }
+    if (amountStr == null) {
+      ctx.response().setStatusCode(400).end("{\"error\":\"amount query param is required\"}");
+      return;
+    }
 
-        double amount;
-        try {
-            amount = Double.parseDouble(amountStr);
-        } catch (NumberFormatException e) {
-            ctx.response().setStatusCode(400).end("{\"error\":\"amount must be a number\"}");
-            return;
-        }
+    double amount;
+    try {
+      amount = Double.parseDouble(amountStr);
+    } catch (NumberFormatException e) {
+      ctx.response().setStatusCode(400).end("{\"error\":\"amount must be a number\"}");
+      return;
+    }
 
         LocalDateTime now = LocalDateTime.now();
         int month = now.getMonthValue();

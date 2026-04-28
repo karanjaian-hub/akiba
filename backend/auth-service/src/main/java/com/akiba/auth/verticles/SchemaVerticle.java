@@ -7,11 +7,6 @@ import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
-/**
- * Runs once on startup — creates all auth schema tables and seeds
- * roles, permissions and default users.
- * Every statement uses IF NOT EXISTS so this is safe to re-run.
- */
 public class SchemaVerticle extends VerticleBase {
 
   private Pool pgPool;
@@ -21,21 +16,17 @@ public class SchemaVerticle extends VerticleBase {
     pgPool = createPgPool();
 
     return createSchema()
-      .compose(v -> createBaseTablesInParallel())
+      .compose(v -> createRolesAndPermissions())
       .compose(v -> createRolePermissionsTable())
-      .compose(v -> createUserTables())
+      .compose(v -> createUsersTable())
+      .compose(v -> createDependentTables())
       .compose(v -> seedRoles())
       .compose(v -> seedPermissions())
       .compose(v -> seedRolePermissions())
       .compose(v -> seedAdminUsers())
       .onSuccess(v -> System.out.println("[SchemaVerticle] ✅ All tables created and seeded"))
-      .onFailure(err -> {
-        System.err.println("[SchemaVerticle] ❌ Schema setup failed: " + err.getMessage());
-        if (pgPool != null) pgPool.close();
-      });
+      .onFailure(err -> System.err.println("[SchemaVerticle] ❌ Schema setup failed: " + err.getMessage()));
   }
-
-  // ─── Pool Setup ────────────────────────────────────────────────────────────
 
   private Pool createPgPool() {
     PgConnectOptions connectOptions = new PgConnectOptions()
@@ -52,38 +43,30 @@ public class SchemaVerticle extends VerticleBase {
       .build();
   }
 
-  // ─── Step 1: Create Schema ─────────────────────────────────────────────────
-
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS auth")
-      .execute()
-      .mapEmpty();
+    return pgPool.query("CREATE SCHEMA IF NOT EXISTS auth").execute().mapEmpty();
   }
 
-  // ─── Step 2: Base tables (parallel — no foreign key deps yet) ─────────────
-
-  private Future<Void> createBaseTablesInParallel() {
+  private Future<Void> createRolesAndPermissions() {
     Future<Void> roles = pgPool.query("""
       CREATE TABLE IF NOT EXISTS auth.roles (
-        id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        name       VARCHAR     UNIQUE NOT NULL,
-        created_at TIMESTAMP   DEFAULT NOW()
+        id         UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
+        name       VARCHAR   UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
       )
       """).execute().mapEmpty();
 
     Future<Void> permissions = pgPool.query("""
       CREATE TABLE IF NOT EXISTS auth.permissions (
-        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        name        VARCHAR     UNIQUE NOT NULL,
+        id          UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
+        name        VARCHAR   UNIQUE NOT NULL,
         description TEXT,
-        created_at  TIMESTAMP   DEFAULT NOW()
+        created_at  TIMESTAMP DEFAULT NOW()
       )
       """).execute().mapEmpty();
 
     return Future.all(roles, permissions).mapEmpty();
   }
-
-  // ─── Step 3: role_permissions depends on both roles + permissions ──────────
 
   private Future<Void> createRolePermissionsTable() {
     return pgPool.query("""
@@ -95,22 +78,33 @@ public class SchemaVerticle extends VerticleBase {
       """).execute().mapEmpty();
   }
 
-  // ─── Step 4: User tables ──────────────────────────────────────────────────
-  // otps table removed — phone/email verification no longer required at signup.
-
-  private Future<Void> createUserTables() {
-    Future<Void> users = pgPool.query("""
+  private Future<Void> createUsersTable() {
+    return pgPool.query("""
       CREATE TABLE IF NOT EXISTS auth.users (
-        id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-        full_name           VARCHAR      NOT NULL,
-        email               VARCHAR      UNIQUE NOT NULL,
-        phone               VARCHAR(15)  UNIQUE NOT NULL,
-        password_hash       VARCHAR      NOT NULL,
-        role_id             UUID         REFERENCES auth.roles(id),
-        status              VARCHAR(20)  DEFAULT 'PENDING_VERIFICATION',
+        id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        full_name           VARCHAR     NOT NULL,
+        email               VARCHAR     UNIQUE NOT NULL,
+        phone               VARCHAR(15) UNIQUE NOT NULL,
+        password_hash       VARCHAR     NOT NULL,
+        role_id             UUID        REFERENCES auth.roles(id),
+        status              VARCHAR(20) DEFAULT 'PENDING_VERIFICATION',
         profile_picture_url TEXT,
-        created_at          TIMESTAMP    DEFAULT NOW(),
-        updated_at          TIMESTAMP    DEFAULT NOW()
+        created_at          TIMESTAMP   DEFAULT NOW(),
+        updated_at          TIMESTAMP   DEFAULT NOW()
+      )
+      """).execute().mapEmpty();
+  }
+
+  private Future<Void> createDependentTables() {
+    Future<Void> otps = pgPool.query("""
+      CREATE TABLE IF NOT EXISTS auth.otps (
+        id         UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id    UUID       REFERENCES auth.users(id) ON DELETE CASCADE,
+        otp_code   VARCHAR(6) NOT NULL,
+        type       VARCHAR(20) NOT NULL,
+        expires_at TIMESTAMP  NOT NULL,
+        used       BOOLEAN    DEFAULT false,
+        created_at TIMESTAMP  DEFAULT NOW()
       )
       """).execute().mapEmpty();
 
@@ -125,60 +119,49 @@ public class SchemaVerticle extends VerticleBase {
       )
       """).execute().mapEmpty();
 
-    return Future.all(users, sessions).mapEmpty();
+    return Future.all(otps, sessions).mapEmpty();
   }
-
-  // ─── Step 5: Seed Roles ────────────────────────────────────────────────────
 
   private Future<Void> seedRoles() {
     return pgPool.query("""
-      INSERT INTO auth.roles (name) VALUES
-        ('ROLE_USER'),
-        ('ROLE_ADMIN')
+      INSERT INTO auth.roles (name) VALUES ('ROLE_USER'), ('ROLE_ADMIN')
       ON CONFLICT (name) DO NOTHING
       """).execute().mapEmpty();
   }
-
-  // ─── Step 6: Seed Permissions ──────────────────────────────────────────────
 
   private Future<Void> seedPermissions() {
     return pgPool.query("""
       INSERT INTO auth.permissions (name, description) VALUES
-        ('transactions:read',    'View own transactions'),
-        ('transactions:write',   'Create and categorize transactions'),
-        ('statements:upload',    'Upload M-Pesa and bank statements'),
-        ('budgets:read',         'View own budgets'),
-        ('budgets:write',        'Create and update budgets'),
-        ('savings:read',         'View own savings goals'),
-        ('savings:write',        'Create and update savings goals'),
-        ('payments:send',        'Send M-Pesa payments'),
-        ('ai:query',             'Query AI financial assistant'),
-        ('profile:read',         'View own profile'),
-        ('profile:write',        'Update own profile'),
-        ('notifications:read',   'View own notifications'),
-        ('admin:users:read',     'Admin - view all users'),
-        ('admin:users:write',    'Admin - deactivate or modify users'),
-        ('admin:reports:read',   'Admin - view system reports')
+        ('transactions:read',  'View own transactions'),
+        ('transactions:write', 'Create and categorize transactions'),
+        ('statements:upload',  'Upload M-Pesa and bank statements'),
+        ('budgets:read',       'View own budgets'),
+        ('budgets:write',      'Create and update budgets'),
+        ('savings:read',       'View own savings goals'),
+        ('savings:write',      'Create and update savings goals'),
+        ('payments:send',      'Send M-Pesa payments'),
+        ('ai:query',           'Query AI financial assistant'),
+        ('profile:read',       'View own profile'),
+        ('profile:write',      'Update own profile'),
+        ('notifications:read', 'View own notifications'),
+        ('admin:users:read',   'Admin - view all users'),
+        ('admin:users:write',  'Admin - deactivate or modify users'),
+        ('admin:reports:read', 'Admin - view system reports')
       ON CONFLICT (name) DO NOTHING
       """).execute().mapEmpty();
   }
 
-  // ─── Step 7: Map permissions to roles ─────────────────────────────────────
-
   private Future<Void> seedRolePermissions() {
     Future<Void> userPerms = pgPool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
-        SELECT r.id, p.id
-        FROM auth.roles r, auth.permissions p
-        WHERE r.name = 'ROLE_USER'
-          AND p.name NOT LIKE 'admin:%'
+        SELECT r.id, p.id FROM auth.roles r, auth.permissions p
+        WHERE r.name = 'ROLE_USER' AND p.name NOT LIKE 'admin:%'
       ON CONFLICT DO NOTHING
       """).execute().mapEmpty();
 
     Future<Void> adminPerms = pgPool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
-        SELECT r.id, p.id
-        FROM auth.roles r, auth.permissions p
+        SELECT r.id, p.id FROM auth.roles r, auth.permissions p
         WHERE r.name = 'ROLE_ADMIN'
       ON CONFLICT DO NOTHING
       """).execute().mapEmpty();
@@ -186,42 +169,22 @@ public class SchemaVerticle extends VerticleBase {
     return Future.all(userPerms, adminPerms).mapEmpty();
   }
 
-  // ─── Step 8: Seed default users ───────────────────────────────────────────
-
   private Future<Void> seedAdminUsers() {
-    String passwordHash = System.getenv().getOrDefault(
-      "SEED_PASSWORD_HASH",
-      "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu"  // dev fallback only
-    );
-
-    return pgPool.preparedQuery("""
+    return pgPool.query("""
       INSERT INTO auth.users (full_name, email, phone, password_hash, role_id, status) VALUES
-        (
-          'Karanja Ian',
-          'karanjaian420@gmail.com',
-          '+254748492654',
-          $1,
-          (SELECT id FROM auth.roles WHERE name = 'ROLE_ADMIN'),
-          'ACTIVE'
-        ),
-        (
-          'Ian Karanja',
-          'iankaranja420@gmail.com',
-          '+254111824449',
-          $1,
-          (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'),
-          'ACTIVE'
-        )
+        ('Karanja Ian', 'karanjaian420@gmail.com', '0748492654',
+         '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+         (SELECT id FROM auth.roles WHERE name = 'ROLE_ADMIN'), 'ACTIVE'),
+        ('Ian Karanja', 'iankaranja420@gmail.com', '0111824449',
+         '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+         (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'), 'ACTIVE')
       ON CONFLICT (email) DO NOTHING
-      """)
-      .execute(io.vertx.sqlclient.Tuple.of(passwordHash))
-      .mapEmpty();
+      """).execute().mapEmpty();
   }
 
   @Override
-  public Future<?> stop() {
+  public Future<?> stop() throws Exception {
     if (pgPool != null) pgPool.close();
-    return Future.succeededFuture();
+    return super.stop();
   }
-
 }

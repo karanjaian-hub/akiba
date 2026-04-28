@@ -38,14 +38,12 @@ public class MainVerticle extends VerticleBase {
       .onSuccess(v -> System.out.println("[AuthService] ✅ Started on port " + servicePort()));
   }
 
-  // Step 1: Deploy Schema
-
+  // Deploy the Schema
   private Future<Void> deploySchemaVerticle() {
     return vertx.deployVerticle(new SchemaVerticle()).mapEmpty();
   }
 
-  // Step 2: Postgres Pool
-
+  // connecting with the Postgres Pool
   private Future<Void> connectPostgres() {
     PgConnectOptions connectOptions = new PgConnectOptions()
       .setHost(System.getenv().getOrDefault("DB_HOST", "localhost"))
@@ -63,8 +61,7 @@ public class MainVerticle extends VerticleBase {
     return Future.succeededFuture();
   }
 
-  // Step 3: Redis
-
+  // Connecting Redis
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
     RedisOptions redisOptions = new RedisOptions()
@@ -80,16 +77,14 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
-  // Step 4: Mail Service
-
+  // Mail Service
   private Future<Void> initMailService() {
     mailService = new MailService(vertx);
     System.out.println("[AuthService] ✅ Mail service ready");
     return Future.succeededFuture();
   }
 
-  // Step 5: HTTP Server & Router
-
+  // Start HTTP Server & Router
   private Future<Void> startHttpServer() {
     Router router = buildRouter();
     return vertx.createHttpServer()
@@ -113,7 +108,7 @@ public class MainVerticle extends VerticleBase {
 
     router.route().handler(BodyHandler.create());
 
-    // ─── Handlers ─────────────────────────────────────────────────────────
+    // Authentication Handlers
     RegisterHandler           registerHandler           = new RegisterHandler(pgPool, redis, mailService);
     VerifyEmailHandler        verifyEmailHandler        = new VerifyEmailHandler(pgPool, redis);
     ResendVerificationHandler resendVerificationHandler = new ResendVerificationHandler(pgPool, redis, mailService);
@@ -123,7 +118,7 @@ public class MainVerticle extends VerticleBase {
     ForgotPasswordHandler     forgotPasswordHandler     = new ForgotPasswordHandler(pgPool, redis, mailService);
     ResetpasswordHandler      resetPasswordHandler      = new ResetpasswordHandler(pgPool, redis);
 
-    // ─── Public Routes ────────────────────────────────────────────────────
+    // Authentication Public Routes
     router.post("/auth/register")             .handler(registerHandler::handle);
     router.post("/auth/verify-email")         .handler(verifyEmailHandler::handle);
     router.post("/auth/resend-verification")  .handler(resendVerificationHandler::handle);
@@ -132,7 +127,7 @@ public class MainVerticle extends VerticleBase {
     router.post("/auth/forgot-password")      .handler(forgotPasswordHandler::handle);
     router.post("/auth/reset-password")       .handler(resetPasswordHandler::handle);
 
-    // ─── Protected Routes (JWT required) ──────────────────────────────────
+    // Protected Routes (JWT is required)
     router.post("/auth/logout")
       .handler(jwtMiddleware())
       .handler(logoutHandler::handle);
@@ -143,7 +138,7 @@ public class MainVerticle extends VerticleBase {
         .setStatusCode(501)
         .end("{\"error\":\"Not implemented yet\"}"));
 
-    // ─── Admin Routes ─────────────────────────────────────────────────────
+    // Admin Routes
     router.get("/auth/users")
       .handler(jwtMiddleware())
       .handler(adminOnly())
@@ -158,7 +153,7 @@ public class MainVerticle extends VerticleBase {
         .setStatusCode(501)
         .end("{\"error\":\"Not implemented yet\"}"));
 
-    // ─── Health Check ─────────────────────────────────────────────────────
+    //  Health Check
     router.get("/health").handler(ctx -> ctx.response()
       .setStatusCode(200)
       .putHeader("Content-Type", "application/json")
@@ -167,13 +162,13 @@ public class MainVerticle extends VerticleBase {
     return router;
   }
 
-  // ─── JWT Middleware ───────────────────────────────────────────────────────
+  // JWT Middleware
 
   private io.vertx.ext.web.handler.JWTAuthHandler jwtMiddleware() {
     return io.vertx.ext.web.handler.JWTAuthHandler.create(jwtAuth);
   }
 
-  // ─── Admin-Only Middleware ────────────────────────────────────────────────
+  // Admin-Only Middleware
 
   private Handler<RoutingContext> adminOnly() {
     return ctx -> {
@@ -189,7 +184,7 @@ public class MainVerticle extends VerticleBase {
     };
   }
 
-  // ─── JWT Auth Setup ───────────────────────────────────────────────────────
+  // JWT Auth Setup
 
   private JWTAuth createJwtAuth() {
     String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");
@@ -199,7 +194,7 @@ public class MainVerticle extends VerticleBase {
         .setBuffer(secret)));
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // Helpers
 
   private int servicePort() {
     return Integer.parseInt(System.getenv().getOrDefault("SERVICE_PORT", "8081"));

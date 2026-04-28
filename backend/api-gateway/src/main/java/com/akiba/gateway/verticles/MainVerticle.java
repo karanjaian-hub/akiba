@@ -33,7 +33,7 @@ public class MainVerticle extends VerticleBase {
       .onFailure(err -> System.err.println("[ApiGateway] ❌ Startup failed: " + err.getMessage()));
   }
 
-  // ─── Redis ────────────────────────────────────────────────────────────────
+  // Redis
 
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
@@ -50,7 +50,7 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
-  // ─── HTTP Server ──────────────────────────────────────────────────────────
+  // HTTP Server
 
   private Future<Void> startHttpServer() {
     return vertx.createHttpServer()
@@ -65,7 +65,6 @@ public class MainVerticle extends VerticleBase {
     JwtMiddleware jwtMiddleware = new JwtMiddleware(jwtAuth, redis);
     RateLimitMiddleware rateLimitMiddleware = new RateLimitMiddleware(redis);
 
-    // In Vert.x 5 CorsHandler.create() takes no args — origins added via allowedOrigin()
     router.route().handler(CorsHandler.create()
       .addOrigin("*")
       .allowedMethod(HttpMethod.GET)
@@ -77,15 +76,15 @@ public class MainVerticle extends VerticleBase {
 
     router.route().handler(BodyHandler.create());
 
-    // ─── Health ───────────────────────────────────────────────────────────
+    // Health
     router.get("/health").handler(this::handleHealth);
 
-    // ─── Public Routes ────────────────────────────────────────────────────
+    // Public Routes
     router.post("/auth/register").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/login").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/refresh").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
 
-    // ─── Protected Routes ─────────────────────────────────────────────────
+    // Protected Routes
     router.route("/auth/*")
       .handler(jwtMiddleware::handle)
       .handler(ctx -> proxyTo(ctx, "auth-service", 8081));
@@ -122,7 +121,7 @@ public class MainVerticle extends VerticleBase {
     return router;
   }
 
-  // ─── Proxy ────────────────────────────────────────────────────────────────
+  // Proxy
 
   private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
@@ -155,7 +154,7 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
-  // ─── Health ───────────────────────────────────────────────────────────────
+  // Health
 
   private void handleHealth(RoutingContext ctx) {
     ctx.response()
@@ -167,7 +166,7 @@ public class MainVerticle extends VerticleBase {
         .encode());
   }
 
-  // ─── JWT Setup ────────────────────────────────────────────────────────────
+  // JWT Setup
 
   private JWTAuth createJwtAuth() {
     String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");

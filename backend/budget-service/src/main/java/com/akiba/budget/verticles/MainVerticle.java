@@ -4,10 +4,14 @@ import com.akiba.budget.consumers.PaymentCompletedConsumer;
 import com.akiba.budget.handlers.BudgetCheckHandler;
 import com.akiba.budget.handlers.GetBudgetsHandler;
 import com.akiba.budget.handlers.UpsertBudgetHandler;
+import com.akiba.budget.middleware.JwtMiddleware;
 import com.akiba.budget.repositories.BudgetRepository;
 import com.akiba.budget.services.BudgetCacheService;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
+import io.vertx.ext.auth.PubSecKeyOptions;
+import io.vertx.ext.auth.jwt.JWTAuth;
+import io.vertx.ext.auth.jwt.JWTAuthOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgBuilder;
@@ -22,84 +26,89 @@ import io.vertx.sqlclient.PoolOptions;
 
 public class MainVerticle extends VerticleBase {
 
-  @Override
-  public Future<?> start() {
-    // Pool (not PgPool) is the correct Vert.x 5 type — built via PgBuilder
-    Pool           pool  = buildPool();
-    RabbitMQClient mq    = buildRabbitMQClient();
-    RedisAPI       redis = buildRedisApi();
+    @Override
+    public Future<?> start() {
+        Pool           pool  = buildPool();
+        RabbitMQClient mq    = buildRabbitMQClient();
+        RedisAPI       redis = buildRedisApi();
+        JWTAuth        jwt   = buildJwtAuth();
 
-    BudgetRepository         budgetRepo   = new BudgetRepository(pool);
-    BudgetCacheService       cacheService = new BudgetCacheService(redis);
-    PaymentCompletedConsumer consumer     = new PaymentCompletedConsumer(mq, budgetRepo, cacheService);
+        BudgetRepository         budgetRepo   = new BudgetRepository(pool);
+        BudgetCacheService       cacheService = new BudgetCacheService(redis);
+        PaymentCompletedConsumer consumer     = new PaymentCompletedConsumer(mq, budgetRepo, cacheService);
 
-    return vertx.deployVerticle(new SchemaVerticle(pool))
-      .compose(id -> mq.start())
-      .compose(v  -> consumer.start())
-      .compose(v  -> startHttpServer(budgetRepo, cacheService))
-      .onSuccess(v -> System.out.println("[BudgetService] Started on port " + servicePort()));
-  }
+        return vertx.deployVerticle(new SchemaVerticle(pool))
+            .compose(id -> mq.start())
+            .compose(v  -> consumer.start())
+            .compose(v  -> startHttpServer(budgetRepo, cacheService, jwt))
+            .onSuccess(v -> System.out.println("[BudgetService] Started on port " + servicePort()));
+    }
 
-  private Future<Void> startHttpServer(BudgetRepository budgetRepo, BudgetCacheService cacheService) {
-    Router router = Router.router(vertx);
-    router.route().handler(BodyHandler.create());
+    private Future<Void> startHttpServer(BudgetRepository budgetRepo, BudgetCacheService cacheService, JWTAuth jwt) {
+        Router router = Router.router(vertx);
+        router.route().handler(BodyHandler.create());
 
-    router.get("/budgets")
-      .handler(new GetBudgetsHandler(budgetRepo)::handle);
+        // Health check is public — registered BEFORE the JWT middleware
+        router.get("/budgets/health")
+            .handler(ctx -> ctx.response()
+                .putHeader("Content-Type", "application/json")
+                .end("{\"status\":\"UP\",\"service\":\"budget-service\"}"));
 
-    router.post("/budgets")
-      .handler(new UpsertBudgetHandler(budgetRepo)::handle);
+        // All routes below this point require a valid JWT
+        router.route().handler(new JwtMiddleware(jwt));
 
-    // overview BEFORE :category — Vert.x matches routes top-down
-    router.get("/budgets/overview")
-      .handler(new GetBudgetsHandler(budgetRepo)::handle);
+        router.get("/budgets")
+            .handler(new GetBudgetsHandler(budgetRepo)::handle);
+        router.post("/budgets")
+            .handler(new UpsertBudgetHandler(budgetRepo)::handle);
 
-    router.get("/budgets/:category/check")
-      .handler(new BudgetCheckHandler(budgetRepo, cacheService)::handle);
+        // overview BEFORE :category — Vert.x matches routes top-down
+        router.get("/budgets/overview")
+            .handler(new GetBudgetsHandler(budgetRepo)::handle);
+        router.get("/budgets/:category/check")
+            .handler(new BudgetCheckHandler(budgetRepo, cacheService)::handle);
 
-    router.get("/health")
-      .handler(ctx -> ctx.response()
-        .putHeader("Content-Type", "application/json")
-        .end("{\"status\":\"UP\",\"service\":\"budget-service\"}"));
+        return vertx.createHttpServer()
+            .requestHandler(router)
+            .listen(servicePort())
+            .mapEmpty();
+    }
 
-    return vertx.createHttpServer()
-      .requestHandler(router)
-      .listen(servicePort())
-      .mapEmpty();
-  }
+    private JWTAuth buildJwtAuth() {
+        return JWTAuth.create(vertx, new JWTAuthOptions()
+            .addPubSecKey(new PubSecKeyOptions()
+                .setAlgorithm("HS256")
+                .setBuffer(System.getenv("JWT_SECRET"))));
+    }
 
-  private Pool buildPool() {
-    PgConnectOptions connectOptions = new PgConnectOptions()
-      .setHost(System.getenv("DB_HOST"))
-      .setPort(Integer.parseInt(System.getenv("DB_PORT")))
-      .setDatabase(System.getenv("DB_NAME"))
-      .setUser(System.getenv("DB_USER"))
-      .setPassword(System.getenv("DB_PASS"));
+    private Pool buildPool() {
+        PgConnectOptions connectOptions = new PgConnectOptions()
+            .setHost(System.getenv("DB_HOST"))
+            .setPort(Integer.parseInt(System.getenv("DB_PORT")))
+            .setDatabase(System.getenv("DB_NAME"))
+            .setUser(System.getenv("DB_USER"))
+            .setPassword(System.getenv("DB_PASS"));
+        return PgBuilder.pool()
+            .with(new PoolOptions().setMaxSize(10))
+            .connectingTo(connectOptions)
+            .using(vertx)
+            .build();
+    }
 
-    PoolOptions poolOptions = new PoolOptions().setMaxSize(10);
+    private RabbitMQClient buildRabbitMQClient() {
+        return RabbitMQClient.create(vertx,
+            new RabbitMQOptions().setHost(System.getenv("RABBITMQ_HOST")));
+    }
 
-    // Vert.x 5 builder API — replaces the deprecated PgPool.pool(vertx, opts, poolOpts)
-    return PgBuilder.pool()
-      .with(poolOptions)
-      .connectingTo(connectOptions)
-      .using(vertx)
-      .build();
-  }
+    private RedisAPI buildRedisApi() {
+        Redis client = Redis.createClient(vertx,
+            new RedisOptions().setConnectionString(
+                "redis://" + System.getenv("REDIS_HOST") + ":6379"));
+        return RedisAPI.api(client);
+    }
 
-  private RabbitMQClient buildRabbitMQClient() {
-    return RabbitMQClient.create(vertx,
-      new RabbitMQOptions().setHost(System.getenv("RABBITMQ_HOST")));
-  }
-
-  private RedisAPI buildRedisApi() {
-    Redis client = Redis.createClient(vertx,
-      new RedisOptions().setConnectionString(
-        "redis://" + System.getenv("REDIS_HOST") + ":6379"));
-    return RedisAPI.api(client);
-  }
-
-  private int servicePort() {
-    String port = System.getenv("SERVICE_PORT");
-    return port != null ? Integer.parseInt(port) : 8086;
-  }
+    private int servicePort() {
+        String port = System.getenv("SERVICE_PORT");
+        return port != null ? Integer.parseInt(port) : 8086;
+    }
 }
