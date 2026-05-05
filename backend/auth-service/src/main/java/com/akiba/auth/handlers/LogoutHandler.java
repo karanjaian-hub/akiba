@@ -9,11 +9,11 @@ import io.vertx.sqlclient.Tuple;
 
 public class LogoutHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
 
-  public LogoutHandler(Pool pgPool, RedisAPI redis) {
-    this.pgPool = pgPool;
+  public LogoutHandler(Pool pool, RedisAPI redis) {
+    this.pool = pool;
     this.redis  = redis;
   }
 
@@ -49,7 +49,7 @@ public class LogoutHandler {
   }
 
   private Future<Void> revokeRefreshToken(String refreshToken) {
-    return pgPool.preparedQuery(
+    return pool.preparedQuery(
         "UPDATE auth.sessions SET revoked = true WHERE refresh_token = $1")
       .execute(Tuple.of(refreshToken))
       .mapEmpty();

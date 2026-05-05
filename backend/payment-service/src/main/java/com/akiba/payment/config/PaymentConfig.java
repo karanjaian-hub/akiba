@@ -11,8 +11,7 @@ import io.vertx.sqlclient.PoolOptions;
 
 public class PaymentConfig {
 
-  // ── Database ───────────────────────────────────────────────────────────────
-  public static Pool createPgPool(Vertx vertx) {
+    public static Pool createPgPool(Vertx vertx) {
     PgConnectOptions connect = new PgConnectOptions()
       .setHost(env("DB_HOST", "localhost"))
       .setPort(Integer.parseInt(env("DB_PORT", "5432")))
@@ -29,7 +28,6 @@ public class PaymentConfig {
       .build();
   }
 
-  // Redis
   public static Redis createRedisClient(Vertx vertx) {
     return Redis.createClient(
       vertx,
@@ -55,7 +53,7 @@ public class PaymentConfig {
     return (val != null && !val.isBlank()) ? val : fallback;
   }
 
-  //Crash early if a required variable is missing — better to fail at boot than silently at runtime
+  //Crash early if a required variable is missing
   private static String require(String key) {
     String val = System.getenv(key);
     if (val == null || val.isBlank()) {

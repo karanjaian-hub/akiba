@@ -14,14 +14,14 @@ import java.util.UUID;
 
 public class RegisterHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
   private final MailService mailService;
 
-  private static final int OTP_TTL_SECONDS = 86400; // 24 hours
+  private static final int OTP_TTL_SECONDS = 86400; // 24 hrs
 
-  public RegisterHandler(Pool pgPool, RedisAPI redis, MailService mailService) {
-    this.pgPool      = pgPool;
+  public RegisterHandler(Pool pool, RedisAPI redis, MailService mailService) {
+    this.pool = pool;
     this.redis       = redis;
     this.mailService = mailService;
   }
@@ -79,7 +79,7 @@ public class RegisterHandler {
         (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'),
         'PENDING_VERIFICATION')
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(userId), fullName, email, phone, passwordHash))
       .mapEmpty();
   }

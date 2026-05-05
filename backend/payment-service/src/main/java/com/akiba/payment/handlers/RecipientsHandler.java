@@ -7,10 +7,7 @@ import io.vertx.ext.web.RoutingContext;
 
 import java.util.UUID;
 
-/**
- * GET  /payments/recipients — returns saved recipients for the "recent recipients" chips
- * PUT  /payments/recipients/:id — update nickname or category
- */
+
 public class RecipientsHandler {
 
   private final PaymentRepository repository;
@@ -69,7 +66,7 @@ public class RecipientsHandler {
     String category = body.getString("defaultCategory");
 
     repository.updateRecipient(recipientId, userId, nickname, category)
-      .onSuccess(v -> ctx.response().setStatusCode(204).end()) // 204 No Content — update successful
+      .onSuccess(v -> ctx.response().setStatusCode(204).end())
       .onFailure(err -> {
         System.err.println("[payment-service] Update recipient failed: " + err.getMessage());
         ctx.response().setStatusCode(500)

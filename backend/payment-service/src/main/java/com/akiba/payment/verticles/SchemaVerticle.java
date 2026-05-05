@@ -7,12 +7,6 @@ import io.vertx.core.Promise;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.SqlClient;
 
-/**
- * SchemaVerticle runs ONCE at startup to make sure the DB tables exist.
- *
- * All statements use IF NOT EXISTS — so restarting the service is always safe.
- * We deploy this first and only start the HTTP server after it completes.
- */
 public class SchemaVerticle extends AbstractVerticle {
 
   @Override

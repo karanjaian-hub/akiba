@@ -1,7 +1,7 @@
 package com.akiba.ai.verticles;
 
 import com.akiba.ai.handlers.AiHandler;
-import com.akiba.ai.providers.GeminiProvider;
+import com.akiba.ai.providers.GroqProvider;
 import com.akiba.ai.repositories.AiRepository;
 import com.akiba.ai.services.AiCacheService;
 import com.akiba.ai.services.AiService;
@@ -44,9 +44,9 @@ public class MainVerticle extends VerticleBase {
 
   @Override
   public Future<?> start() {
-    String geminiKey = System.getenv("GEMINI_API_KEY");
-    if (geminiKey == null || geminiKey.isBlank()) {
-      return Future.failedFuture("GEMINI_API_KEY environment variable is not set");
+    String groqKey = System.getenv("GROQ_API_KEY");
+    if (groqKey == null || groqKey.isBlank()) {
+      return Future.failedFuture("GROQ_API_KEY environment variable is not set");
     }
 
     int port = Integer.parseInt(System.getenv().getOrDefault("SERVICE_PORT", "8084"));
@@ -58,7 +58,7 @@ public class MainVerticle extends VerticleBase {
     WebClient webClient = WebClient.create(vertx);
 
     // ── Build dependency graph ────────────────────────────────────────────
-    GeminiProvider           gemini    = new GeminiProvider(webClient, geminiKey);
+    GroqProvider             gemini    = new GroqProvider(webClient, groqKey);
     AiCacheService           cache     = new AiCacheService(redis);
     FinancialContextService  context   = new FinancialContextService(webClient);
     AiRepository             repo      = new AiRepository(pgPool);

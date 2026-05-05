@@ -12,14 +12,14 @@ import java.security.SecureRandom;
 
 public class ResendVerificationHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
   private final MailService mailService;
 
-  private static final int OTP_TTL_SECONDS = 86400; // 24 hours
+  private static final int OTP_TTL_SECONDS = 86400; // 24 hrs
 
-  public ResendVerificationHandler(Pool pgPool, RedisAPI redis, MailService mailService) {
-    this.pgPool      = pgPool;
+  public ResendVerificationHandler(Pool pool, RedisAPI redis, MailService mailService) {
+    this.pool = pool;
     this.redis       = redis;
     this.mailService = mailService;
   }
@@ -68,7 +68,7 @@ public class ResendVerificationHandler {
       SELECT id, full_name FROM auth.users
       WHERE email = $1 AND status = 'PENDING_VERIFICATION'
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(email))
       .map(rows -> {
         if (rows.rowCount() == 0) return null;

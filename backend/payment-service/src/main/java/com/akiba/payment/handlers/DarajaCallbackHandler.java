@@ -4,27 +4,6 @@ import com.akiba.payment.services.PaymentService;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
-/**
- * POST /payments/callback — Safaricom posts the payment result here.
- *
- * WHY no JWT: Safaricom's servers call this endpoint, not our mobile app.
- * They don't have our JWT. The API Gateway must allow this route through without auth.
- *
- * Security note: In production, validate Daraja's IP whitelist at the nginx/gateway level.
- * This handler trusts the payload structure — don't expose it publicly without IP filtering.
- *
- * Daraja callback payload structure:
- * {
- *   "Body": {
- *     "stkCallback": {
- *       "MerchantRequestID": "...",
- *       "CheckoutRequestID": "...",
- *       "ResultCode": 0,           // 0 = success
- *       "ResultDesc": "The service request is processed successfully."
- *     }
- *   }
- * }
- */
 public class DarajaCallbackHandler {
 
   private final PaymentService paymentService;

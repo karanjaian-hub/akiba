@@ -27,16 +27,14 @@ public class TransactionSaveConsumer {
     this.anomalyService  = anomalyService;
   }
 
-  /**
-   * Registers the consumer. Called once during MainVerticle startup.
-   * basicConsumer returns a Future<RabbitMQConsumer> — we attach our handler to it.
-   */
   public Future<Void> start() {
-    // queueDeclare first — ensures the queue exists before we try to consume from it.
-    // durable=true means the queue survives a RabbitMQ restart.
+    System.out.println("[TransactionSaveConsumer] Starting...");
     return rabbitMQ.queueDeclare(QUEUE_INBOUND, true, false, false)
       .compose(ok -> rabbitMQ.basicConsumer(QUEUE_INBOUND))
-      .onSuccess(consumer -> consumer.handler(this::handleMessage))
+      .onSuccess(consumer -> {
+        consumer.handler(this::handleMessage);
+        System.out.println("[TransactionSaveConsumer] Listening on '" + QUEUE_INBOUND + "'");
+      })
       .onFailure(err -> System.err.println("[TransactionSaveConsumer] Failed to register: " + err.getMessage()))
       .mapEmpty();
   }
@@ -45,11 +43,10 @@ public class TransactionSaveConsumer {
     String body = message.body().toString();
 
     processMessage(body)
-      // ACK: tell RabbitMQ "I processed this successfully, remove it from the queue"
-      // deliveryTag is the unique ID RabbitMQ assigns to each message delivery
+
       .onSuccess(v -> rabbitMQ.basicAck(message.envelope().getDeliveryTag(), false)
         .onFailure(e -> System.err.println("[TransactionSaveConsumer] ACK failed: " + e.getMessage())))
-      // NACK: processing failed — send to dead letter, don't requeue
+
       .onFailure(err -> {
         rabbitMQ.basicNack(message.envelope().getDeliveryTag(), false, false);
         sendToDeadLetter(body, err.getMessage());
@@ -66,10 +63,7 @@ public class TransactionSaveConsumer {
       .compose(v -> routeSavingsTransactions(userId, txArray));
   }
 
-  /**
-   * Transactions categorized as "Savings" are forwarded to the savings-service.
-   * This is fire-and-forget — a routing failure should not fail the main insert.
-   */
+  // Transactions categorized as "Savings" are forwarded to the savings-service..
   private Future<Void> routeSavingsTransactions(String userId, JsonArray transactions) {
     for (int i = 0; i < transactions.size(); i++) {
       JsonObject tx = transactions.getJsonObject(i);

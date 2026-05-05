@@ -11,11 +11,11 @@ import java.util.List;
 import java.util.UUID;
 
 public class ResetpasswordHandler {
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
 
-  public ResetpasswordHandler(Pool pgPool, RedisAPI redis) {
-    this.pgPool = pgPool;
+  public ResetpasswordHandler(Pool pool, RedisAPI redis) {
+    this.pool = pool;
     this.redis  = redis;
   }
 
@@ -87,7 +87,7 @@ public class ResetpasswordHandler {
       SET password_hash = $1, updated_at = NOW()
       WHERE id = $2 AND status = 'ACTIVE'
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(passwordHash, UUID.fromString(userId)))
       .compose(rows -> {
         if (rows.rowCount() == 0) {

@@ -14,9 +14,12 @@ import io.vertx.rabbitmq.RabbitMQOptions;
 
 public class HttpVerticle extends VerticleBase {
 
-  @Override
-  public Future<?> start() {
+ @Override
+ public Future<?> start() {
     int port = config().getInteger("SERVICE_PORT", 8083);
+
+    // Ensure upload temp directory exists
+    vertx.fileSystem().mkdirs("/tmp/akiba-uploads");
 
     return startRabbitMQ()
       .map(this::buildRouter)
@@ -33,21 +36,27 @@ public class HttpVerticle extends VerticleBase {
       .setPort(5672)
       .setAutomaticRecoveryEnabled(true));
 
-    return client.start().map(v -> client);
+    return client.start()
+      // Declare with same settings as consumer — durable=true, non-exclusive, non-autodelete
+      .compose(v -> client.queueDeclare("parse.statement", true, false, false))
+      .map(v -> client);
   }
 
   private Router buildRouter(RabbitMQClient rabbitMQ) {
-    ParseHandler parseHandler = new ParseHandler(rabbitMQ);
+    ParseHandler parseHandler = new ParseHandler(rabbitMQ, vertx);
     JWTAuth      jwtAuth      = buildJwtAuth();
 
     Router router = Router.router(vertx);
-    router.route().handler(BodyHandler.create().setBodyLimit(10 * 1024 * 1024));
+    router.route().handler(BodyHandler.create()
+      .setBodyLimit(10 * 1024 * 1024)
+      .setUploadsDirectory("/tmp/akiba-uploads")
+      .setDeleteUploadedFilesOnEnd(false));
 
     router.get("/health").handler(parseHandler::handleHealth);
 
-    router.route("/*").handler(JWTAuthHandler.create(jwtAuth));
-    router.post("/mpesa").handler(parseHandler::handleMpesaParse);
-    router.post("/bank").handler(parseHandler::handleBankParse);
+    router.route("/parse/*").handler(JWTAuthHandler.create(jwtAuth));
+    router.post("/parse/mpesa").handler(parseHandler::handleMpesaParse);
+    router.post("/parse/bank").handler(parseHandler::handleBankParse);
 
     return router;
   }

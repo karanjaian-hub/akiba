@@ -37,7 +37,6 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   // Infrastructure setup
-
   private Future<InfrastructureComponents> connectInfrastructure() {
     Pool  db    = PaymentConfig.createPgPool(vertx);
     Redis redis = PaymentConfig.createRedisClient(vertx);
@@ -58,7 +57,6 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   // HTTP server
-
   private Future<Void> startHttpServer(InfrastructureComponents infra) {
     Router router = buildRouter(infra);
 
@@ -82,7 +80,7 @@ public class MainVerticle extends AbstractVerticle {
 
     // Global middleware
     router.route().handler(CorsHandler.create()
-      .addOrigin("*")  // tighten in production to your Expo app origin
+      .addOrigin("*")
       .allowedMethod(io.vertx.core.http.HttpMethod.GET)
       .allowedMethod(io.vertx.core.http.HttpMethod.POST)
       .allowedMethod(io.vertx.core.http.HttpMethod.PUT)

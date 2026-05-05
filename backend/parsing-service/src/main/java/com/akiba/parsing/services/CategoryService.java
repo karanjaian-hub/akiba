@@ -8,13 +8,7 @@ import io.vertx.core.json.JsonObject;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Takes a list of already-parsed transactions and asks Gemini to
- * assign a spending category to each one.
- *
- * We batch all transactions into a single Gemini call (not one per tx)
- * to save on API quota and latency.
- */
+
 public class CategoryService {
 
   private static final List<String> VALID_CATEGORIES = List.of(
@@ -43,10 +37,10 @@ public class CategoryService {
         %s
         """;
 
-  private final GeminiClient geminiClient;
+  private final GroqClient groqClient;
 
-  public CategoryService(GeminiClient geminiClient) {
-    this.geminiClient = geminiClient;
+  public CategoryService(GroqClient groqClient) {
+    this.groqClient = groqClient;
   }
 
   /**
@@ -61,7 +55,7 @@ public class CategoryService {
     String txSummary = buildTransactionSummary(transactions);
     String prompt    = CATEGORY_PROMPT_TEMPLATE.formatted(txSummary);
 
-    return geminiClient.ask(prompt)
+    return groqClient.ask(prompt)
       .map(geminiText -> applyCategories(transactions, geminiText));
   }
 

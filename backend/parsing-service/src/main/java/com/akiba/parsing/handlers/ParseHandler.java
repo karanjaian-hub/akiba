@@ -1,17 +1,22 @@
 package com.akiba.parsing.handlers;
 
+import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.rabbitmq.RabbitMQClient;
 
+import java.util.Base64;
 import java.util.UUID;
 
 public class ParseHandler {
 
   private final RabbitMQClient rabbitMQ;
+  private final Vertx          vertx;
 
-  public ParseHandler(RabbitMQClient rabbitMQ) {
+  public ParseHandler(RabbitMQClient rabbitMQ, Vertx vertx) {
     this.rabbitMQ = rabbitMQ;
+    this.vertx    = vertx;
   }
 
   public void handleMpesaParse(RoutingContext ctx) {
@@ -22,7 +27,6 @@ public class ParseHandler {
       return;
     }
 
-    // userId comes from the JWT, injected by api-gateway
     String userId  = ctx.user().subject();
     String jobId   = UUID.randomUUID().toString();
     String smsText = body.getString("smsText");
@@ -43,39 +47,44 @@ public class ParseHandler {
       .onFailure(err -> sendInternalError(ctx, "Failed to queue parse job", err));
   }
 
-  /**
-   * POST /parse/bank
-   * Body: { "pdf": "base64encodedPDFbytes" }
-   */
   public void handleBankParse(RoutingContext ctx) {
-    JsonObject body = ctx.body().asJsonObject();
-    if (body == null || body.getString("pdf", "").isBlank()) {
+    FileUpload fileUpload = ctx.fileUploads().stream()
+      .filter(f -> f.name().equals("pdf"))
+      .findFirst()
+      .orElse(null);
+
+    if (fileUpload == null) {
       ctx.response().setStatusCode(400)
-        .end(new JsonObject().put("error", "pdf (base64) is required").encode());
+        .end(new JsonObject().put("error", "PDF file is required (multipart field: pdf)").encode());
       return;
     }
 
     String userId = ctx.user().subject();
     String jobId  = UUID.randomUUID().toString();
-    String pdf    = body.getString("pdf");
 
-    JsonObject message = new JsonObject()
-      .put("jobId",   jobId)
-      .put("userId",  userId)
-      .put("type",    "BANK_PDF")
-      .put("content", pdf);
-
-    rabbitMQ.basicPublish("", "parse.statement", message.toBuffer())
-      .onSuccess(v -> ctx.response().setStatusCode(202)
-        .end(new JsonObject()
+    vertx.fileSystem().readFile(fileUpload.uploadedFileName())
+      .map(buffer -> Base64.getEncoder().encodeToString(buffer.getBytes()))
+      .compose(base64Pdf -> {
+        JsonObject message = new JsonObject()
           .put("jobId",   jobId)
-          .put("status",  "QUEUED")
-          .put("message", "Bank PDF parse job queued successfully")
-          .encode()))
+          .put("userId",  userId)
+          .put("type",    "BANK_PDF")
+          .put("content", base64Pdf);
+
+        return rabbitMQ.basicPublish("", "parse.statement", message.toBuffer());
+      })
+      .onSuccess(v -> {
+        vertx.fileSystem().delete(fileUpload.uploadedFileName());
+        ctx.response().setStatusCode(202)
+          .end(new JsonObject()
+            .put("jobId",   jobId)
+            .put("status",  "QUEUED")
+            .put("message", "Bank PDF parse job queued successfully")
+            .encode());
+      })
       .onFailure(err -> sendInternalError(ctx, "Failed to queue bank PDF job", err));
   }
 
-  /** GET /health — used by Docker HEALTHCHECK and load balancers */
   public void handleHealth(RoutingContext ctx) {
     ctx.response().setStatusCode(200)
       .end(new JsonObject()

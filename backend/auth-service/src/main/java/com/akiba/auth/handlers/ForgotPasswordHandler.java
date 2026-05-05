@@ -12,14 +12,14 @@ import java.security.SecureRandom;
 
 public class ForgotPasswordHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
   private final MailService mailService;
 
   private static final int OTP_TTL_SECONDS = 600; // 10 minutes
 
-  public ForgotPasswordHandler(Pool pgPool, RedisAPI redis, MailService mailService) {
-    this.pgPool      = pgPool;
+  public ForgotPasswordHandler(Pool pool, RedisAPI redis, MailService mailService) {
+    this.pool = pool;
     this.redis       = redis;
     this.mailService = mailService;
   }
@@ -41,7 +41,6 @@ public class ForgotPasswordHandler {
     lookupUser(email)
       .compose(user -> {
         if (user == null) {
-          // Don't reveal whether the email exists — always respond the same way
           return Future.succeededFuture(null);
         }
         String otp    = generateOtp();
@@ -64,14 +63,13 @@ public class ForgotPasswordHandler {
       });
   }
 
-  // ─── Lookup user by email ─────────────────────────────────────────────────
-
+  // Lookup/search user by email
   private Future<JsonObject> lookupUser(String email) {
     String sql = """
       SELECT id, full_name FROM auth.users
       WHERE email = $1 AND status = 'ACTIVE'
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(email))
       .map(rows -> {
         if (rows.rowCount() == 0) return null;
@@ -82,15 +80,13 @@ public class ForgotPasswordHandler {
       });
   }
 
-  // ─── Store OTP in Redis with TTL ──────────────────────────────────────────
-
+  // Store the OTP in Redis with TTL(time to live 10 mins)
   private Future<Void> storeOtpInRedis(String userId, String otp) {
     String key = "pwd_reset:" + userId;
     return redis.setex(key, String.valueOf(OTP_TTL_SECONDS), otp).mapEmpty();
   }
 
-  // ─── Generate 6-digit OTP ─────────────────────────────────────────────────
-
+  // Generate a 6-digit OTP
   private String generateOtp() {
     return String.format("%06d", new SecureRandom().nextInt(999999));
   }

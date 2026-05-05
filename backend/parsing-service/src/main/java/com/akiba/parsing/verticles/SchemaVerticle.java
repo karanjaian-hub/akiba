@@ -7,7 +7,7 @@ import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
-public class DatabaseVerticle extends VerticleBase {
+public class SchemaVerticle extends VerticleBase {
 
   @Override
   public Future<?> start() {

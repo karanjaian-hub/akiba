@@ -13,20 +13,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 
-/**
- * DarajaService — the only class that talks to Safaricom's API.
- *
- * Two responsibilities:
- *  1. Get (and cache) an OAuth access token — Daraja tokens expire after 1 hour,
- *     so we cache in Redis with a slightly shorter TTL (3500s) to avoid using a stale one.
- *  2. Initiate an STK Push — sends a payment prompt to the user's phone.
- *
- * The sandbox and production URLs differ only by hostname; swap DARAJA_BASE_URL env var
- * when going live (no code changes needed).
- */
 public class DarajaService {
 
-  // ── Daraja sandbox base URL — swap to production via env var in real deployment ──
   private static final String DARAJA_BASE_URL = "https://sandbox.safaricom.co.ke";
   private static final String TOKEN_CACHE_KEY  = "daraja:token";
   private static final int    TOKEN_TTL_SEC    = 3500; // slightly under Daraja's 3600s
@@ -49,28 +37,13 @@ public class DarajaService {
     this.callbackUrl    = PaymentConfig.darajaCallbackUrl();
   }
 
-  // ── Public API ─────────────────────────────────────────────────────────────
-
-  /**
-   * Sends an STK Push to the user's phone.
-   * Returns a JsonObject with checkoutRequestId and merchantRequestId from Daraja.
-   *
-   * @param phone      Recipient phone in format 254XXXXXXXXX
-   * @param amount     Amount in KES (whole number)
-   * @param accountRef Shown on the M-Pesa confirmation SMS
-   * @param description Short description shown in the STK dialog
-   */
+  // ── Public API
   public Future<JsonObject> initiateStkPush(String phone, int amount, String accountRef, String description) {
     return getAccessToken()
       .compose(token -> sendStkPushRequest(token, phone, amount, accountRef, description));
   }
 
-  // ── Token management ───────────────────────────────────────────────────────
-
-  /**
-   * Gets a valid token — from Redis cache if available, otherwise fetches a fresh one.
-   * This avoids hammering the Daraja OAuth endpoint on every payment.
-   */
+  // Token management
   private Future<String> getAccessToken() {
     return redis.get(TOKEN_CACHE_KEY)
       .compose(cached -> {
@@ -82,7 +55,6 @@ public class DarajaService {
   }
 
   private Future<String> fetchFreshToken() {
-    // Daraja uses HTTP Basic auth: Base64(consumerKey:consumerSecret)
     String credentials = Base64.getEncoder().encodeToString(
       (consumerKey + ":" + consumerSecret).getBytes(StandardCharsets.UTF_8)
     );
@@ -120,8 +92,7 @@ public class DarajaService {
       });
   }
 
-  // ── STK Push ───────────────────────────────────────────────────────────────
-
+  // STK Push
   private Future<JsonObject> sendStkPushRequest(
     String token, String phone, int amount, String accountRef, String description) {
 

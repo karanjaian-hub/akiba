@@ -48,8 +48,8 @@ public class MainVerticle extends VerticleBase {
                 .putHeader("Content-Type", "application/json")
                 .end("{\"status\":\"UP\",\"service\":\"transaction-service\"}"));
 
+        
         // All routes below this point require a valid JWT.
-        // router.route() with no path matches every route from here down.
         router.route().handler(new JwtMiddleware(jwt));
 
         router.get("/transactions")

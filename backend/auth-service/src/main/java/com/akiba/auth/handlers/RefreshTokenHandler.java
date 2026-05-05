@@ -17,7 +17,7 @@ import java.util.UUID;
 
 public class RefreshTokenHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
   private final JWTAuth jwtAuth;
 
@@ -25,8 +25,8 @@ public class RefreshTokenHandler {
   private static final int REFRESH_TOKEN_DAYS   = 7;
   private static final int SESSION_TTL_SECONDS  = 900;
 
-  public RefreshTokenHandler(Pool pgPool, RedisAPI redis, JWTAuth jwtAuth) {
-    this.pgPool  = pgPool;
+  public RefreshTokenHandler(Pool pool, RedisAPI redis, JWTAuth jwtAuth) {
+    this.pool = pool;
     this.redis   = redis;
     this.jwtAuth = jwtAuth;
   }
@@ -47,8 +47,8 @@ public class RefreshTokenHandler {
     }
 
     loadSession(refreshToken)
-      .compose(session -> loadUserWithPermissions(session))
-      .compose(data -> rotateTokens(data))
+      .compose(this::loadUserWithPermissions)
+      .compose(this::rotateTokens)
       .onSuccess(tokens -> ctx.response()
         .setStatusCode(200)
         .putHeader("Content-Type", "application/json")
@@ -65,7 +65,7 @@ public class RefreshTokenHandler {
       FROM auth.sessions s
       WHERE s.refresh_token = $1
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(refreshToken))
       .compose(rows -> {
         if (rows.rowCount() == 0) {
@@ -97,7 +97,7 @@ public class RefreshTokenHandler {
       JOIN auth.roles r ON r.id = u.role_id
       WHERE u.id = $1 AND u.status = 'ACTIVE'
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(userId)))
       .compose(rows -> {
         if (rows.rowCount() == 0) {
@@ -121,7 +121,7 @@ public class RefreshTokenHandler {
       JOIN auth.role_permissions rp ON rp.permission_id = p.id
       WHERE rp.role_id = $1
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(user.getString("roleId"))))
       .compose(rows -> {
         JsonArray permissions = new JsonArray();
@@ -157,7 +157,7 @@ public class RefreshTokenHandler {
   }
 
   private Future<Void> revokeOldRefreshToken(String refreshToken) {
-    return pgPool.preparedQuery(
+    return pool.preparedQuery(
         "UPDATE auth.sessions SET revoked = true WHERE refresh_token = $1")
       .execute(Tuple.of(refreshToken))
       .mapEmpty();
@@ -169,7 +169,7 @@ public class RefreshTokenHandler {
       VALUES ($1, $2, $3)
       """;
     Instant expiresAt = Instant.now().plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS);
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(
         UUID.fromString(userId),
         refreshToken,

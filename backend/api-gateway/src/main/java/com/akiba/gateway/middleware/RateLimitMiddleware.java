@@ -7,12 +7,11 @@ import io.vertx.redis.client.RedisAPI;
 
 import java.util.List;
 
-//  Redis-backed rate limiter for payment routes.
-// Max 5 payment requests per user per minute.
+// limits payment requests (Max.. 3 payment requests per user per minute.)
 public class RateLimitMiddleware {
 
   private final RedisAPI redis;
-  private static final int MAX_REQUESTS_PER_MINUTE = 5;
+  private static final int MAX_REQUESTS_PER_MINUTE = 3;
 
   public RateLimitMiddleware(RedisAPI redis) {
     this.redis = redis;
@@ -32,7 +31,6 @@ public class RateLimitMiddleware {
       .compose(count -> {
         long requestCount = count.toLong();
         if (requestCount == 1) {
-          // In Vert.x 5 Redis client, expire takes a List<String>
           return redis.expire(List.of(key, "60"))
             .map(v -> requestCount);
         }

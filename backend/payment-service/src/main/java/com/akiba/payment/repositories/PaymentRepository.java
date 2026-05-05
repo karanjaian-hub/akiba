@@ -12,10 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * All SQL lives here — handlers never touch the DB directly.
- * Single Responsibility: translate between Java objects and database rows.
- */
 public class PaymentRepository {
 
   private final Pool db;
@@ -24,8 +20,7 @@ public class PaymentRepository {
     this.db = db;
   }
 
-  // ── Payments ───────────────────────────────────────────────────────────────
-
+  // Payments
   /** Insert a fresh PENDING payment and return it with the generated ID. */
   public Future<Payment> insertPayment(Payment payment) {
     String sql = """

@@ -9,11 +9,11 @@ import io.vertx.sqlclient.PoolOptions;
 
 public class SchemaVerticle extends VerticleBase {
 
-  private Pool pgPool;
+  private Pool pool;
 
   @Override
   public Future<?> start() {
-    pgPool = createPgPool();
+    pool = createPgPool();
 
     return createSchema()
       .compose(v -> createRolesAndPermissions())
@@ -44,11 +44,11 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS auth").execute().mapEmpty();
+    return pool.query("CREATE SCHEMA IF NOT EXISTS auth").execute().mapEmpty();
   }
 
   private Future<Void> createRolesAndPermissions() {
-    Future<Void> roles = pgPool.query("""
+    Future<Void> roles = pool.query("""
       CREATE TABLE IF NOT EXISTS auth.roles (
         id         UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
         name       VARCHAR   UNIQUE NOT NULL,
@@ -56,7 +56,7 @@ public class SchemaVerticle extends VerticleBase {
       )
       """).execute().mapEmpty();
 
-    Future<Void> permissions = pgPool.query("""
+    Future<Void> permissions = pool.query("""
       CREATE TABLE IF NOT EXISTS auth.permissions (
         id          UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
         name        VARCHAR   UNIQUE NOT NULL,
@@ -69,7 +69,7 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> createRolePermissionsTable() {
-    return pgPool.query("""
+    return pool.query("""
       CREATE TABLE IF NOT EXISTS auth.role_permissions (
         role_id       UUID REFERENCES auth.roles(id)       ON DELETE CASCADE,
         permission_id UUID REFERENCES auth.permissions(id) ON DELETE CASCADE,
@@ -79,7 +79,7 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> createUsersTable() {
-    return pgPool.query("""
+    return pool.query("""
       CREATE TABLE IF NOT EXISTS auth.users (
         id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         full_name           VARCHAR     NOT NULL,
@@ -96,7 +96,7 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> createDependentTables() {
-    Future<Void> otps = pgPool.query("""
+    Future<Void> otps = pool.query("""
       CREATE TABLE IF NOT EXISTS auth.otps (
         id         UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id    UUID       REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -108,7 +108,7 @@ public class SchemaVerticle extends VerticleBase {
       )
       """).execute().mapEmpty();
 
-    Future<Void> sessions = pgPool.query("""
+    Future<Void> sessions = pool.query("""
       CREATE TABLE IF NOT EXISTS auth.sessions (
         id            UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id       UUID      REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -123,14 +123,14 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> seedRoles() {
-    return pgPool.query("""
+    return pool.query("""
       INSERT INTO auth.roles (name) VALUES ('ROLE_USER'), ('ROLE_ADMIN')
       ON CONFLICT (name) DO NOTHING
       """).execute().mapEmpty();
   }
 
   private Future<Void> seedPermissions() {
-    return pgPool.query("""
+    return pool.query("""
       INSERT INTO auth.permissions (name, description) VALUES
         ('transactions:read',  'View own transactions'),
         ('transactions:write', 'Create and categorize transactions'),
@@ -152,14 +152,14 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> seedRolePermissions() {
-    Future<Void> userPerms = pgPool.query("""
+    Future<Void> userPerms = pool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
         SELECT r.id, p.id FROM auth.roles r, auth.permissions p
         WHERE r.name = 'ROLE_USER' AND p.name NOT LIKE 'admin:%'
       ON CONFLICT DO NOTHING
       """).execute().mapEmpty();
 
-    Future<Void> adminPerms = pgPool.query("""
+    Future<Void> adminPerms = pool.query("""
       INSERT INTO auth.role_permissions (role_id, permission_id)
         SELECT r.id, p.id FROM auth.roles r, auth.permissions p
         WHERE r.name = 'ROLE_ADMIN'
@@ -170,7 +170,7 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> seedAdminUsers() {
-    return pgPool.query("""
+    return pool.query("""
       INSERT INTO auth.users (full_name, email, phone, password_hash, role_id, status) VALUES
         ('Karanja Ian', 'karanjaian420@gmail.com', '0748492654',
          '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
@@ -184,7 +184,7 @@ public class SchemaVerticle extends VerticleBase {
 
   @Override
   public Future<?> stop() throws Exception {
-    if (pgPool != null) pgPool.close();
+    if (pool != null) pool.close();
     return super.stop();
   }
 }

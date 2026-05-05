@@ -6,10 +6,10 @@ import io.vertx.sqlclient.Pool;
 
 public class SchemaVerticle extends VerticleBase {
 
-  private final Pool pgPool;
+  private final Pool pool;
 
-  public SchemaVerticle(Pool pgPool) {
-    this.pgPool = pgPool;
+  public SchemaVerticle(Pool pool) {
+    this.pool = pool;
   }
 
   @Override
@@ -21,7 +21,7 @@ public class SchemaVerticle extends VerticleBase {
   }
 
   private Future<Void> createSchema() {
-    return pgPool.query("CREATE SCHEMA IF NOT EXISTS transactions")
+    return pool.query("CREATE SCHEMA IF NOT EXISTS transactions")
       .execute()
       .mapEmpty();
   }
@@ -43,7 +43,7 @@ public class SchemaVerticle extends VerticleBase {
                 created_at  TIMESTAMP DEFAULT NOW()
             )
             """;
-    return pgPool.query(sql).execute()
+    return pool.query(sql).execute()
       .onFailure(e -> System.err.println("[SchemaVerticle] records table failed: " + e.getMessage()))
       .mapEmpty();
   }
@@ -60,7 +60,7 @@ public class SchemaVerticle extends VerticleBase {
                 created_at   TIMESTAMP DEFAULT NOW()
             )
             """;
-    return pgPool.query(sql).execute()
+    return pool.query(sql).execute()
       .onFailure(e -> System.err.println("[SchemaVerticle] imports table failed: " + e.getMessage()))
       .mapEmpty();
   }

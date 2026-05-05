@@ -26,7 +26,6 @@ public class MailService {
   }
 
   // Sending Email Verification OTP
-
   public Future<Void> sendVerificationOtp(String toEmail, String fullName, String otp) {
     MailMessage message = new MailMessage()
       .setFrom(from)
@@ -42,7 +41,6 @@ public class MailService {
   }
 
   // Password Reset OTP
-
   public Future<Void> sendPasswordResetOtp(String toEmail, String fullName, String otp) {
     MailMessage message = new MailMessage()
       .setFrom(from)
@@ -58,7 +56,6 @@ public class MailService {
   }
 
   // Templates
-
   private String verificationOtpHtml(String fullName, String otp) {
     return """
       <html>

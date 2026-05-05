@@ -34,7 +34,7 @@ public class CreateTransactionHandler {
       return;
     }
 
-    // Log exactly what arrived so we can see it in docker-compose logs
+    // Log exactly what arrived so we can see it in the logs
     System.out.println("[CreateTransactionHandler] userId=" + userId + " body=" + body.encode());
 
     body.put("source",    "MANUAL");

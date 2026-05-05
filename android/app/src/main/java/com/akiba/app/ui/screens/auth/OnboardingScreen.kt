@@ -176,23 +176,32 @@ fun OnboardingScreen(navController: NavHostController) {
                         }
 
                         val isLastPage = pagerState.currentPage == pages.size - 1
-                        AkibaButton(
-                            text     = if (isLastPage) "Get Started" else "Next",
-                            variant  = if (isLastPage) AkibaButtonVariant.Success
-                                       else AkibaButtonVariant.Primary,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick  = {
-                                if (isLastPage) {
-                                    navController.navigate(Screen.Login.route) {
-                                        popUpTo(Screen.Onboarding.route) { inclusive = true }
-                                    }
+                        val currentPage = pagerState.currentPage
+                        Button(
+                            onClick = {
+                                if (currentPage == pages.size - 1) {
+                                    navController.navigate(Screen.Login.route)
                                 } else {
                                     scope.launch {
-                                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                        pagerState.animateScrollToPage(currentPage + 1)
                                     }
                                 }
                             },
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                            colors   = ButtonDefaults.buttonColors(
+                                containerColor = if (isLastPage)
+                                    MaterialTheme.akibaColors.accentGreen
+                                else MaterialTheme.colorScheme.primary
+                            ),
+                            shape = AkibaShapes.button,
+                        ) {
+                            Text(
+                                text       = if (isLastPage) "Get Started" else "Next",
+                                fontFamily = DmSansFontFamily,
+                                fontSize   = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                color      = androidx.compose.ui.graphics.Color.White,
+                            )
+                        }
                     }
                 }
             }

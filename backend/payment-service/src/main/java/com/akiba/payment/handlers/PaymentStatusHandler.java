@@ -9,13 +9,6 @@ import io.vertx.redis.client.RedisAPI;
 
 import java.util.UUID;
 
-/**
- * GET /payments/status/:paymentId
- *
- * The mobile app polls this every 3 seconds after initiating a payment.
- * We check Redis first (fast path) — the pending state is cached there.
- * On cache miss we fall back to DB — this happens after the callback clears Redis.
- */
 public class PaymentStatusHandler {
 
   private final PaymentRepository repository;
@@ -71,6 +64,4 @@ public class PaymentStatusHandler {
     return new JsonObject().put("error", message).encode();
   }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 

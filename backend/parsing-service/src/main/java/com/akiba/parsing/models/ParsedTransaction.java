@@ -2,13 +2,7 @@ package com.akiba.parsing.models;
 
 import io.vertx.core.json.JsonObject;
 
-/**
- * Represents a single financial transaction extracted from
- * an M-Pesa SMS or a bank PDF statement.
- *
- * Both parsers produce this same shape so downstream services
- * (CategoryService, transaction-service) never need to know the source.
- */
+
 public class ParsedTransaction {
 
   public enum TransactionType { DEBIT, CREDIT }
@@ -16,14 +10,13 @@ public class ParsedTransaction {
   private String date;
   private double amount;
   private TransactionType type;
-  private String merchant;      // M-Pesa: merchant/recipient name; Bank: description
-  private String reference;     // M-Pesa transaction ID or bank reference number
-  private String rawText;       // Original line — useful for debugging / audit
-  private String category;      // Populated later by CategoryService
-  private double balance;       // Bank statements include running balance; M-Pesa may not
+  private String merchant;      // ../recipients name/Bank/description
+  private String reference; // M-Pesa transaction ID or bank reference number
+  private String rawText; // Original line
+  private String category; // Populated later by the CategoryService
+  private double balance;
 
-  // --- Factories ---
-
+  // Factories
   public static ParsedTransaction fromJson(JsonObject json) {
     ParsedTransaction tx = new ParsedTransaction();
     tx.date       = json.getString("date");
@@ -49,8 +42,7 @@ public class ParsedTransaction {
       .put("balance",   balance);
   }
 
-  // --- Getters & Setters ---
-
+  // Getters/Setters
   public String getDate()                        { return date; }
   public void   setDate(String date)             { this.date = date; }
 

@@ -15,17 +15,6 @@ import io.vertx.redis.client.RedisAPI;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/**
- * PaymentService sits between the HTTP handlers and the infrastructure (Daraja, DB, Redis, RabbitMQ).
- *
- * It owns the two-step payment flow:
- *   1. Budget check  → is there budget room for this payment?
- *   2. STK Push      → ask Daraja to prompt the user's phone
- *   3. Persist       → save the PENDING record so we can match the callback later
- *   4. Cache         → store pending state in Redis for fast status polling
- *
- * The callback (step 5) is handled separately in DarajaCallbackHandler.
- */
 public class PaymentService {
 
   // Redis TTL for pending payment state — Daraja callbacks arrive within ~30s in practice,
@@ -47,14 +36,8 @@ public class PaymentService {
     this.rabbitMQ   = rabbitMQ;
   }
 
-  // ── Initiate payment ───────────────────────────────────────────────────────
-
-  /**
-   * Orchestrates the full initiation flow.
-   * Returns early with a 400 error if the budget would be exceeded.
-   * Returns a PENDING payment record if the STK push succeeded.
-   */
-  public Future<Payment> initiatePayment(UUID userId, String phone, BigDecimal amount,
+  // Initiate payment
+ public Future<Payment> initiatePayment(UUID userId, String phone, BigDecimal amount,
                                          String category, Payment.Type type, String accountRef) {
     return checkBudget(userId, category, amount)
       .compose(canAfford -> {
@@ -65,26 +48,18 @@ public class PaymentService {
       });
   }
 
-  /**
-   * Calls the budget-service to check whether this payment would exceed the monthly limit.
-   * Returns false if over budget, true if fine.
-   *
-   * WHY a dedicated budget-service call: budget logic is the budget-service's responsibility.
-   * We ask, it answers — separation of concerns.
-   */
+
   private Future<Boolean> checkBudget(UUID userId, String category, BigDecimal amount) {
-    // PLACEHOLDER: replace with real JWT propagation when auth middleware is in place.
-    // The budget-service endpoint expects the calling user's JWT so it can scope the check.
+
     String budgetUrl = PaymentConfig.budgetServiceUrl()
       + "/budgets/" + category + "/check?amount=" + amount;
 
     return webClient.getAbs(budgetUrl)
-      .putHeader("X-User-Id", userId.toString()) // internal header trusted within the cluster
+      .putHeader("X-User-Id", userId.toString())
       .send()
       .map(resp -> {
         if (resp.statusCode() != 200) {
-          // If budget-service is down, fail open (allow the payment) to avoid blocking users.
-          // Log the degraded state so ops can investigate.
+
           System.err.println("[payment-service] Budget check failed (budget-service returned "
             + resp.statusCode() + ") — failing open for user " + userId);
           return true;
@@ -97,10 +72,6 @@ public class PaymentService {
       });
   }
 
-  /**
-   * Sends the STK Push to Daraja, then saves the PENDING record to DB and Redis.
-   * All three steps are chained with Future.compose() so any failure stops the chain.
-   */
   private Future<Payment> triggerStkAndSave(UUID userId, String phone, BigDecimal amount,
                                             String category, Payment.Type type, String accountRef) {
     String description = "Akiba payment to " + (accountRef != null ? accountRef : phone);
@@ -113,8 +84,7 @@ public class PaymentService {
         return repository.insertPayment(payment);
       })
       .compose(savedPayment -> {
-        // Cache the pending state so the mobile app can poll status cheaply
-        // without hammering the DB every 3 seconds.
+
         String cacheKey = "payment:" + savedPayment.getCheckoutRequestId();
         JsonObject cached = new JsonObject()
           .put("paymentId", savedPayment.getId().toString())
@@ -141,13 +111,7 @@ public class PaymentService {
     return p;
   }
 
-  // ── Callback processing ────────────────────────────────────────────────────
-
-  /**
-   * Called by DarajaCallbackHandler when Safaricom posts the payment result.
-   * Updates DB status, clears Redis pending state, and — on success — publishes
-   * the completed event to RabbitMQ so budget-service and notifications can react.
-   */
+  // Callback processing
   public Future<Void> processCallback(String checkoutRequestId, String resultCode,
                                       String resultDesc) {
     boolean success = "0".equals(resultCode);
@@ -170,17 +134,7 @@ public class PaymentService {
     return redis.del(java.util.List.of("payment:" + checkoutRequestId)).mapEmpty();
   }
 
-  /**
-   * Publishes a 'payment.completed' event to RabbitMQ.
-   * The budget-service and notification-service listen on this queue.
-   *
-   * WHY RabbitMQ: we don't want to call those services directly — if one is down,
-   * we'd lose the event. RabbitMQ persists it until the consumer is ready.
-   *
-   * API: basicPublish(exchange, routingKey, Buffer)
-   * - exchange ""  = default exchange; routingKey = queue name directly
-   * - body is a plain Buffer — no wrapper object, no options class
-   */
+
   private Future<Void> publishPaymentCompleted(Payment payment) {
     JsonObject event = new JsonObject()
       .put("userId",    payment.getUserId().toString())

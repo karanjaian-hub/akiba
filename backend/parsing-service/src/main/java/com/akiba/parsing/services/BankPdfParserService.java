@@ -11,14 +11,7 @@ import io.vertx.ext.web.client.WebClientOptions;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Two-step pipeline:
- *   Step 1 — POST base64 PDF to pdf-helper service → get plain text back
- *   Step 2 — Send that text to Gemini → get structured transactions back
- *
- * We offload PDF extraction to a Python sidecar (pdf-helper) because
- * PyMuPDF is far better at Kenyan bank PDFs than Java PDF libraries.
- */
+
 public class BankPdfParserService {
 
   private static final String EXTRACT_PROMPT_TEMPLATE = """
@@ -38,10 +31,10 @@ public class BankPdfParserService {
         %s
         """;
 
-  private final GeminiClient geminiClient;
+  private final GroqClient geminiClient;
   private final WebClient    httpClient;
 
-  public BankPdfParserService(Vertx vertx, GeminiClient geminiClient) {
+  public BankPdfParserService(Vertx vertx, GroqClient geminiClient) {
     this.geminiClient = geminiClient;
     // pdf-helper is a Docker sidecar — hostname matches docker-compose service name
     this.httpClient   = WebClient.create(vertx, new WebClientOptions()
@@ -49,10 +42,7 @@ public class BankPdfParserService {
       .setDefaultPort(8099));
   }
 
-  /**
-   * @param base64Pdf  Base64-encoded PDF bytes
-   * @return           List of extracted transactions
-   */
+
   public Future<List<ParsedTransaction>> parse(String base64Pdf) {
     if (base64Pdf == null || base64Pdf.isBlank()) {
       return Future.succeededFuture(List.of());
@@ -83,7 +73,7 @@ public class BankPdfParserService {
       });
   }
 
-  // Step 2: Ask Gemini to turn that wall of text into structured JSON
+  // Step 2: Ask Groq to turn that wall of text into structured JSON
   private Future<List<ParsedTransaction>> parseTextWithGemini(String pdfText) {
     String prompt = EXTRACT_PROMPT_TEMPLATE.formatted(pdfText.trim());
 

@@ -12,11 +12,11 @@ import java.util.UUID;
 
 public class VerifyEmailHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
 
-  public VerifyEmailHandler(Pool pgPool, RedisAPI redis) {
-    this.pgPool = pgPool;
+  public VerifyEmailHandler(Pool pool, RedisAPI redis) {
+    this.pool = pool;
     this.redis  = redis;
   }
 
@@ -72,7 +72,7 @@ public class VerifyEmailHandler {
       SET status = 'ACTIVE', updated_at = NOW()
       WHERE id = $1 AND status = 'PENDING_VERIFICATION'
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(userId)))
       .compose(rows -> {
         if (rows.rowCount() == 0) {

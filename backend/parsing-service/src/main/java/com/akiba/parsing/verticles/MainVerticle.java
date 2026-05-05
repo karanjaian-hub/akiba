@@ -17,7 +17,7 @@ public class MainVerticle extends VerticleBase {
   }
 
   private Future<Void> initDatabase() {
-    return vertx.deployVerticle(new DatabaseVerticle()).mapEmpty();
+    return vertx.deployVerticle(new SchemaVerticle()).mapEmpty();
   }
 
   private Future<Void> deployConsumer() {

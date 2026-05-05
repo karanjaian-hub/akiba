@@ -9,25 +9,7 @@ import io.vertx.ext.web.RoutingContext;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/**
- * Handles POST /payments/initiate
- *
- * Request JSON:
- * {
- *   "phone":      "254712345678",
- *   "amount":     1500,
- *   "category":   "Bills",
- *   "type":       "PHONE" | "TILL" | "PAYBILL",
- *   "accountRef": "KPLC-12345",   // required for PAYBILL, optional otherwise
- *   "nickname":   "KPLC Token"    // optional — saved to recipients table
- * }
- *
- * Response (202 Accepted):
- * { "paymentId": "...", "status": "PENDING", "message": "Check your phone for M-Pesa prompt" }
- *
- * Response (400 Bad Request) on budget exceeded:
- * { "error": "BUDGET_EXCEEDED", "message": "Not enough budget in Bills" }
- */
+
 public class InitiatePaymentHandler {
 
   private final PaymentService     paymentService;
@@ -121,11 +103,7 @@ public class InitiatePaymentHandler {
       });
   }
 
-  /**
-   * Converts Kenyan phone formats to Daraja-required 254XXXXXXXXX format.
-   * e.g. 0712345678 → 254712345678
-   *      +254712345678 → 254712345678
-   */
+
   private String normalizePhone(String phone) {
     phone = phone.replaceAll("\\s+", "").replaceAll("-", "");
     if (phone.startsWith("+254")) return phone.substring(1);

@@ -33,8 +33,6 @@ public class MainVerticle extends VerticleBase {
       .onFailure(err -> System.err.println("[ApiGateway] ❌ Startup failed: " + err.getMessage()));
   }
 
-  // Redis
-
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
     return Redis.createClient(vertx, new RedisOptions()
@@ -49,8 +47,6 @@ public class MainVerticle extends VerticleBase {
         return Future.succeededFuture();
       });
   }
-
-  // HTTP Server
 
   private Future<Void> startHttpServer() {
     return vertx.createHttpServer()
@@ -76,7 +72,6 @@ public class MainVerticle extends VerticleBase {
 
     router.route().handler(BodyHandler.create());
 
-    // Health
     router.get("/health").handler(this::handleHealth);
 
     // Public Routes
@@ -122,7 +117,6 @@ public class MainVerticle extends VerticleBase {
   }
 
   // Proxy
-
   private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
     String method = ctx.request().method().name();
@@ -155,7 +149,6 @@ public class MainVerticle extends VerticleBase {
   }
 
   // Health
-
   private void handleHealth(RoutingContext ctx) {
     ctx.response()
       .setStatusCode(200)
@@ -167,7 +160,6 @@ public class MainVerticle extends VerticleBase {
   }
 
   // JWT Setup
-
   private JWTAuth createJwtAuth() {
     String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");
     return JWTAuth.create(vertx, new JWTAuthOptions()

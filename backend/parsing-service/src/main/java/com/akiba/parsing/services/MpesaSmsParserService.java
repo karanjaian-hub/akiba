@@ -7,14 +7,6 @@ import io.vertx.core.json.JsonArray;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Takes raw M-Pesa SMS text (one or many messages pasted together)
- * and uses Gemini to extract structured transactions from it.
- *
- * Why Gemini and not a regex? M-Pesa SMS formats change over time and
- * vary by transaction type (send money, pay bill, buy goods, withdraw).
- * A language model handles all variants without needing a regex per type.
- */
 public class MpesaSmsParserService {
 
   private static final String EXTRACT_PROMPT_TEMPLATE = """
@@ -33,9 +25,9 @@ public class MpesaSmsParserService {
         %s
         """;
 
-  private final GeminiClient geminiClient;
+  private final GroqClient geminiClient;
 
-  public MpesaSmsParserService(GeminiClient geminiClient) {
+  public MpesaSmsParserService(GroqClient geminiClient) {
     this.geminiClient = geminiClient;
   }
 
@@ -56,7 +48,6 @@ public class MpesaSmsParserService {
 
   private Future<List<ParsedTransaction>> parseGeminiResponse(String geminiText) {
     try {
-      // Strip any accidental markdown fences Gemini sometimes adds
       String cleaned = geminiText.strip()
         .replaceAll("^```json\\s*", "")
         .replaceAll("^```\\s*",     "")
@@ -73,7 +64,6 @@ public class MpesaSmsParserService {
       return Future.succeededFuture(transactions);
 
     } catch (Exception e) {
-      // Don't crash the whole job for a malformed response; fail with context
       return Future.failedFuture(
         "Failed to parse Gemini M-Pesa response: " + e.getMessage()
           + " | Raw response: " + geminiText

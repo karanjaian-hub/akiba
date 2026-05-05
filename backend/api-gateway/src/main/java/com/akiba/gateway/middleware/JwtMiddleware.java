@@ -6,7 +6,6 @@ import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.redis.client.RedisAPI;
 
-// Verifies JWT on every protected route.
 
 public class JwtMiddleware {
 
@@ -33,7 +32,7 @@ public class JwtMiddleware {
         JsonObject principal = user.principal();
         String jti           = principal.getString("jti");
 
-        // Check if this token was explicitly revoked via logout
+        // Checks if this token is blacklsted
         return redis.get("blacklist:" + jti)
           .compose(blacklisted -> {
             if (blacklisted != null) {

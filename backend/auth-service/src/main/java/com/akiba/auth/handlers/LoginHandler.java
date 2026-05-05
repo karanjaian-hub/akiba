@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public class LoginHandler {
 
-  private final Pool pgPool;
+  private final Pool pool;
   private final RedisAPI redis;
   private final JWTAuth jwtAuth;
 
@@ -26,8 +26,8 @@ public class LoginHandler {
   private static final int REFRESH_TOKEN_DAYS    = 7;
   private static final int SESSION_TTL_SECONDS   = 900;
 
-  public LoginHandler(Pool pgPool, RedisAPI redis, JWTAuth jwtAuth) {
-    this.pgPool   = pgPool;
+  public LoginHandler(Pool pool, RedisAPI redis, JWTAuth jwtAuth) {
+    this.pool = pool;
     this.redis    = redis;
     this.jwtAuth  = jwtAuth;
   }
@@ -50,8 +50,8 @@ public class LoginHandler {
 
     loadUserByEmail(email)
       .compose(user -> verifyPassword(password, user))
-      .compose(user -> checkAccountStatus(user))
-      .compose(user -> loadUserPermissions(user))
+      .compose(this::checkAccountStatus)
+      .compose(this::loadUserPermissions)
       .compose(this::issueTokens)
       .onSuccess(tokens -> ctx.response()
         .setStatusCode(200)
@@ -71,7 +71,7 @@ public class LoginHandler {
       JOIN auth.roles r ON r.id = u.role_id
       WHERE u.email = $1
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(email))
       .compose(rows -> {
         if (rows.rowCount() == 0) {
@@ -119,7 +119,7 @@ public class LoginHandler {
       JOIN auth.role_permissions rp ON rp.permission_id = p.id
       WHERE rp.role_id = $1
       """;
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(UUID.fromString(user.getString("roleId"))))
       .compose(rows -> {
         JsonArray permissions = new JsonArray();
@@ -162,7 +162,7 @@ public class LoginHandler {
       VALUES ($1, $2, $3)
       """;
     Instant expiresAt = Instant.now().plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS);
-    return pgPool.preparedQuery(sql)
+    return pool.preparedQuery(sql)
       .execute(Tuple.of(
         UUID.fromString(userId),
         refreshToken,

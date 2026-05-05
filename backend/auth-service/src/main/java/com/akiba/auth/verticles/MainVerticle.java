@@ -23,7 +23,7 @@ import io.vertx.sqlclient.PoolOptions;
 
 public class MainVerticle extends VerticleBase {
 
-  private Pool pgPool;
+  private Pool pool;
   private RedisAPI redis;
   private JWTAuth jwtAuth;
   private MailService mailService;
@@ -52,7 +52,7 @@ public class MainVerticle extends VerticleBase {
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
       .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"));
 
-    pgPool = PgBuilder.pool()
+    pool = PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(10))
       .connectingTo(connectOptions)
       .using(vertx)
@@ -109,14 +109,14 @@ public class MainVerticle extends VerticleBase {
     router.route().handler(BodyHandler.create());
 
     // Authentication Handlers
-    RegisterHandler           registerHandler           = new RegisterHandler(pgPool, redis, mailService);
-    VerifyEmailHandler        verifyEmailHandler        = new VerifyEmailHandler(pgPool, redis);
-    ResendVerificationHandler resendVerificationHandler = new ResendVerificationHandler(pgPool, redis, mailService);
-    LoginHandler              loginHandler              = new LoginHandler(pgPool, redis, jwtAuth);
-    RefreshTokenHandler       refreshTokenHandler       = new RefreshTokenHandler(pgPool, redis, jwtAuth);
-    LogoutHandler             logoutHandler             = new LogoutHandler(pgPool, redis);
-    ForgotPasswordHandler     forgotPasswordHandler     = new ForgotPasswordHandler(pgPool, redis, mailService);
-    ResetpasswordHandler      resetPasswordHandler      = new ResetpasswordHandler(pgPool, redis);
+    RegisterHandler           registerHandler           = new RegisterHandler(pool, redis, mailService);
+    VerifyEmailHandler        verifyEmailHandler        = new VerifyEmailHandler(pool, redis);
+    ResendVerificationHandler resendVerificationHandler = new ResendVerificationHandler(pool, redis, mailService);
+    LoginHandler              loginHandler              = new LoginHandler(pool, redis, jwtAuth);
+    RefreshTokenHandler       refreshTokenHandler       = new RefreshTokenHandler(pool, redis, jwtAuth);
+    LogoutHandler             logoutHandler             = new LogoutHandler(pool, redis);
+    ForgotPasswordHandler     forgotPasswordHandler     = new ForgotPasswordHandler(pool, redis, mailService);
+    ResetpasswordHandler      resetPasswordHandler      = new ResetpasswordHandler(pool, redis);
 
     // Authentication Public Routes
     router.post("/auth/register")             .handler(registerHandler::handle);
@@ -185,7 +185,6 @@ public class MainVerticle extends VerticleBase {
   }
 
   // JWT Auth Setup
-
   private JWTAuth createJwtAuth() {
     String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");
     return JWTAuth.create(vertx, new JWTAuthOptions()
@@ -195,14 +194,13 @@ public class MainVerticle extends VerticleBase {
   }
 
   // Helpers
-
   private int servicePort() {
     return Integer.parseInt(System.getenv().getOrDefault("SERVICE_PORT", "8081"));
   }
 
   @Override
   public Future<Void> stop() {
-    if (pgPool != null) pgPool.close();
+    if (pool != null) pool.close();
     System.out.println("[AuthService] 🛑 Stopped");
     return Future.succeededFuture();
   }

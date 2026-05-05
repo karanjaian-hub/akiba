@@ -3,7 +3,7 @@ package com.akiba.parsing.consumers;
 import com.akiba.parsing.models.ParsedTransaction;
 import com.akiba.parsing.services.BankPdfParserService;
 import com.akiba.parsing.services.CategoryService;
-import com.akiba.parsing.services.GeminiClient;
+import com.akiba.parsing.services.GroqClient;
 import com.akiba.parsing.services.MpesaSmsParserService;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
@@ -23,7 +23,7 @@ public class ParseConsumerVerticle extends VerticleBase {
 
   @Override
   public Future<?> start() {
-    GeminiClient gemini = new GeminiClient(vertx);
+    GroqClient gemini = new GroqClient(vertx);
     smsParser       = new MpesaSmsParserService(gemini);
     pdfParser       = new BankPdfParserService(vertx, gemini);
     categoryService = new CategoryService(gemini);
@@ -73,9 +73,14 @@ public class ParseConsumerVerticle extends VerticleBase {
     String type    = messageBody.getString("type", "MPESA_SMS").toUpperCase();
     String content = messageBody.getString("content", "");
 
+    System.out.println("[ParseConsumerVerticle] Processing job: " + jobId + " type: " + type);
+
     return parseContent(type, content)
+      .onSuccess(v -> System.out.println("[ParseConsumerVerticle] Parsed " + v.size() + " transactions for job: " + jobId))
       .compose(transactions -> categoryService.categorize(transactions))
-      .compose(categorized  -> publishToTransactionSave(jobId, userId, categorized));
+      .onSuccess(v -> System.out.println("[ParseConsumerVerticle] Categorized, publishing to transaction.save"))
+      .compose(categorized -> publishToTransactionSave(jobId, userId, categorized))
+      .onSuccess(v -> System.out.println("[ParseConsumerVerticle] Job " + jobId + " completed successfully"));
   }
 
   private Future<List<ParsedTransaction>> parseContent(String type, String content) {
