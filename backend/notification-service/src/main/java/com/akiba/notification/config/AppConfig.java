@@ -73,6 +73,7 @@ public class AppConfig {
       .setPassword(System.getenv().getOrDefault("RABBITMQ_PASS", "guest"))
       .setVirtualHost(System.getenv().getOrDefault("RABBITMQ_VHOST", "/"))
       .setSsl(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
+      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
       .setReconnectAttempts(10)
       .setReconnectInterval(1000);
     return RabbitMQClient.create(vertx, options);
