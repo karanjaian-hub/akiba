@@ -105,7 +105,7 @@ public class MainVerticle extends VerticleBase {
   private RedisAPI buildRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "redis");
     Redis redis = Redis.createClient(vertx, new RedisOptions()
-      .setConnectionString("redis://" + redisHost + ":6379"));
+      .setConnectionString("rediss://:" + System.getenv().getOrDefault("REDIS_PASSWORD", "") + "@" + redisHost + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379")));
     return RedisAPI.api(redis);
   }
 

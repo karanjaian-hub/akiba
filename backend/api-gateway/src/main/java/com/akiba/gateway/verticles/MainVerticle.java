@@ -35,8 +35,10 @@ public class MainVerticle extends VerticleBase {
 
   private Future<Void> connectRedis() {
     String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+    String redisPort = System.getenv().getOrDefault("REDIS_PORT", "6379");
+    String redisPassword = System.getenv().getOrDefault("REDIS_PASSWORD", "");
     return Redis.createClient(vertx, new RedisOptions()
-        .setConnectionString("redis://" + redisHost + ":6379"))
+        .setConnectionString("rediss://:" + redisPassword + "@" + redisHost + ":" + redisPort))
       .connect()
       .compose(conn -> {
         redis = RedisAPI.api(conn);

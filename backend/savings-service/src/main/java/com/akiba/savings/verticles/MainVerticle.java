@@ -89,14 +89,19 @@ public class MainVerticle extends VerticleBase {
       .using(vertx)
       .build();
   }
-
   private RedisAPI buildRedis(JsonObject config) {
-    String host = config.getString("REDIS_HOST", "redis");
-    int    port = Integer.parseInt(config.getString("REDIS_PORT", "6379"));
-    return RedisAPI.api(Redis.createClient(vertx,
-      new RedisOptions().setConnectionString("redis://" + host + ":" + port)));
-  }
+    String host     = config.getString("REDIS_HOST", "redis");
+    String port     = config.getString("REDIS_PORT", "6379");
+    String password = config.getString("REDIS_PASSWORD", "");
+    String tls      = config.getString("REDIS_TLS", "false");
 
+    String redisUrl = tls.equals("true")
+      ? "rediss://:" + password + "@" + host + ":" + port
+      : "redis://" + host + ":" + port;
+
+    return RedisAPI.api(Redis.createClient(vertx,
+      new RedisOptions().setConnectionString(redisUrl)));
+  }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
     RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()
       .setHost(config.getString("RABBITMQ_HOST", "rabbitmq"))

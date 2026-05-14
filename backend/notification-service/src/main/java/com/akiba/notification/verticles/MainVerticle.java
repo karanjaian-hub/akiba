@@ -20,7 +20,7 @@ public class MainVerticle extends VerticleBase {
 
     Pool           pgPool    = AppConfig.buildPgPool(vertx, config);
     RabbitMQClient rabbit    = AppConfig.buildRabbitMQ(vertx, config);
-    Redis          redisConn = Redis.createClient(vertx, "redis://" + config.redisHost() + ":6379");
+    Redis          redisConn = Redis.createClient(vertx, "rediss://:" + System.getenv().getOrDefault("REDIS_PASSWORD", "") + "@" + config.redisHost() + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379"));
     RedisAPI       redis     = RedisAPI.api(redisConn);
 
     AlertHandler            alertHandler = new AlertHandler(pgPool);

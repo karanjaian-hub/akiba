@@ -31,7 +31,7 @@ public class PaymentConfig {
   public static Redis createRedisClient(Vertx vertx) {
     return Redis.createClient(
       vertx,
-      new RedisOptions().setConnectionString("redis://" + env("REDIS_HOST", "localhost") + ":6379")
+      new RedisOptions().setConnectionString("rediss://:" + env("REDIS_PASSWORD", "") + "@" + env("REDIS_HOST", "localhost") + ":" + env("REDIS_PORT", "6379"))
     );
   }
 
