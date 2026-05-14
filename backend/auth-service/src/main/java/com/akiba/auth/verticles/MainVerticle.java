@@ -63,9 +63,26 @@ public class MainVerticle extends VerticleBase {
 
   // Connecting Redis
   private Future<Void> connectRedis() {
-    String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+    String redisHost     = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+    String redisPort     = System.getenv().getOrDefault("REDIS_PORT", "6379");
+    String redisPassword = System.getenv().getOrDefault("REDIS_PASSWORD", "");
+    String redisTls      = System.getenv().getOrDefault("REDIS_TLS", "false");
+
+    String redisUrl = redisTls.equals("true")
+      ? "rediss://default:" + redisPassword + "@" + redisHost + ":" + redisPort
+      : "redis://" + redisHost + ":" + redisPort;
+
     RedisOptions redisOptions = new RedisOptions()
-      .setConnectionString("rediss://:" + System.getenv().getOrDefault("REDIS_PASSWORD", "") + "@" + redisHost + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379"));
+      .setConnectionString(redisUrl);
+
+    if (redisTls.equals("true")) {
+      redisOptions.setNetClientOptions(
+        new io.vertx.core.net.NetClientOptions()
+          .setSsl(true)
+          .setHostnameVerificationAlgorithm("HTTPS")
+          .setTrustAll(true)
+      );
+    }
 
     return Redis.createClient(vertx, redisOptions)
       .connect()
@@ -73,7 +90,7 @@ public class MainVerticle extends VerticleBase {
         redis = RedisAPI.api(conn);
         jwtAuth = createJwtAuth();
         System.out.println("[AuthService] ✅ Redis connected");
-        return Future.<Void>succeededFuture();
+        return Future.succeededFuture();
       });
   }
 

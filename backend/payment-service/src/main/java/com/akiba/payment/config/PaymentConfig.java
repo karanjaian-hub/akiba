@@ -29,10 +29,25 @@ public class PaymentConfig {
   }
 
   public static Redis createRedisClient(Vertx vertx) {
-    return Redis.createClient(
-      vertx,
-      new RedisOptions().setConnectionString("rediss://:" + env("REDIS_PASSWORD", "") + "@" + env("REDIS_HOST", "localhost") + ":" + env("REDIS_PORT", "6379"))
-    );
+    String redisTls      = env("REDIS_TLS", "false");
+    String redisPassword = env("REDIS_PASSWORD", "");
+    String redisHost     = env("REDIS_HOST", "localhost");
+    String redisPort     = env("REDIS_PORT", "6379");
+
+    String redisUrl = redisTls.equals("true")
+      ? "rediss://default:" + redisPassword + "@" + redisHost + ":" + redisPort
+      : "redis://" + redisHost + ":" + redisPort;
+
+    RedisOptions redisOptions = new RedisOptions().setConnectionString(redisUrl);
+    if (redisTls.equals("true")) {
+      redisOptions.setNetClientOptions(
+        new io.vertx.core.net.NetClientOptions()
+          .setSsl(true)
+          .setHostnameVerificationAlgorithm("HTTPS")
+          .setTrustAll(true)
+      );
+    }
+    return Redis.createClient(vertx, redisOptions);
   }
 
   // Daraja saf configs
@@ -42,7 +57,7 @@ public class PaymentConfig {
   public static String darajaPasskey()        { return require("DARAJA_PASSKEY"); }
   public static String darajaCallbackUrl()    { return require("DARAJA_CALLBACK_URL"); }
 
-  // Service config 
+  // Service config
   public static int    servicePort()          { return Integer.parseInt(env("SERVICE_PORT", "8085")); }
   public static String budgetServiceUrl()     { return env("BUDGET_SERVICE_URL", "http://budget-service:8086"); }
   public static String jwtSecret()        { return require("JWT_SECRET"); }

@@ -96,11 +96,19 @@ public class MainVerticle extends VerticleBase {
     String tls      = config.getString("REDIS_TLS", "false");
 
     String redisUrl = tls.equals("true")
-      ? "rediss://:" + password + "@" + host + ":" + port
+      ? "rediss://default:" + password + "@" + host + ":" + port
       : "redis://" + host + ":" + port;
 
-    return RedisAPI.api(Redis.createClient(vertx,
-      new RedisOptions().setConnectionString(redisUrl)));
+    RedisOptions redisOptions = new RedisOptions().setConnectionString(redisUrl);
+    if (tls.equals("true")) {
+      redisOptions.setNetClientOptions(
+        new io.vertx.core.net.NetClientOptions()
+          .setSsl(true)
+          .setHostnameVerificationAlgorithm("HTTPS")
+          .setTrustAll(true)
+      );
+    }
+    return RedisAPI.api(Redis.createClient(vertx, redisOptions));
   }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
     RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()

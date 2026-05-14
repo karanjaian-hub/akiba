@@ -34,11 +34,25 @@ public class MainVerticle extends VerticleBase {
   }
 
   private Future<Void> connectRedis() {
-    String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
-    String redisPort = System.getenv().getOrDefault("REDIS_PORT", "6379");
+    String redisHost     = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+    String redisPort     = System.getenv().getOrDefault("REDIS_PORT", "6379");
     String redisPassword = System.getenv().getOrDefault("REDIS_PASSWORD", "");
-    return Redis.createClient(vertx, new RedisOptions()
-        .setConnectionString("rediss://:" + redisPassword + "@" + redisHost + ":" + redisPort))
+    String redisTls      = System.getenv().getOrDefault("REDIS_TLS", "false");
+
+    String redisUrl = redisTls.equals("true")
+      ? "rediss://default:" + redisPassword + "@" + redisHost + ":" + redisPort
+      : "redis://" + redisHost + ":" + redisPort;
+
+    RedisOptions redisOptions = new RedisOptions().setConnectionString(redisUrl);
+    if (redisTls.equals("true")) {
+      redisOptions.setNetClientOptions(
+        new io.vertx.core.net.NetClientOptions()
+          .setSsl(true)
+          .setHostnameVerificationAlgorithm("HTTPS")
+          .setTrustAll(true)
+      );
+    }
+    return Redis.createClient(vertx, redisOptions)
       .connect()
       .compose(conn -> {
         redis = RedisAPI.api(conn);

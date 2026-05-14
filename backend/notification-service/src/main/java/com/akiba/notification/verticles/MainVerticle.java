@@ -10,6 +10,7 @@ import io.vertx.core.VerticleBase;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.RedisAPI;
+import io.vertx.redis.client.RedisOptions;
 import io.vertx.sqlclient.Pool;
 
 public class MainVerticle extends VerticleBase {
@@ -20,7 +21,16 @@ public class MainVerticle extends VerticleBase {
 
     Pool           pgPool    = AppConfig.buildPgPool(vertx, config);
     RabbitMQClient rabbit    = AppConfig.buildRabbitMQ(vertx, config);
-    Redis          redisConn = Redis.createClient(vertx, "rediss://:" + System.getenv().getOrDefault("REDIS_PASSWORD", "") + "@" + config.redisHost() + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379"));
+
+    String redisTls = System.getenv().getOrDefault("REDIS_TLS", "false");
+    String redisUrl = redisTls.equals("true")
+      ? "rediss://default:" + System.getenv().getOrDefault("REDIS_PASSWORD", "") + "@" + config.redisHost() + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379")
+      : "redis://" + config.redisHost() + ":" + System.getenv().getOrDefault("REDIS_PORT", "6379");
+    io.vertx.core.net.NetClientOptions netOpts = redisTls.equals("true")
+      ? new io.vertx.core.net.NetClientOptions().setSsl(true).setHostnameVerificationAlgorithm("HTTPS").setTrustAll(true)
+      : new io.vertx.core.net.NetClientOptions();
+    Redis          redisConn = Redis.createClient(vertx, new RedisOptions().setConnectionString(redisUrl).setNetClientOptions(netOpts));
+    
     RedisAPI       redis     = RedisAPI.api(redisConn);
 
     AlertHandler            alertHandler = new AlertHandler(pgPool);
