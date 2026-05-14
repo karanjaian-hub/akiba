@@ -69,15 +69,18 @@ public class AppConfig {
   }
 
   public static RabbitMQClient buildRabbitMQ(Vertx vertx, AppConfig config) {
+    boolean useTls = System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671");
+    String vhost = System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
+    String encodedVhost = vhost.equals("/") ? "%2F" : vhost;
+    String uri = (useTls ? "amqps" : "amqp")
+      + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
+      + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
+      + "/" + encodedVhost;
     RabbitMQOptions options = new RabbitMQOptions()
-      .setUri((System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
-        + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
-        + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
-        + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
-      )
-      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")).getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
+      .setUri(uri)
+      .setTrustAll(useTls)
       .setReconnectAttempts(10)
       .setReconnectInterval(1000);
     return RabbitMQClient.create(vertx, options);
