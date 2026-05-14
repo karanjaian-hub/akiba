@@ -112,12 +112,16 @@ public class MainVerticle extends VerticleBase {
   }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
     boolean useTls = config.getString("RABBITMQ_PORT", "5672").equals("5671");
+    String vhost = config.getString("RABBITMQ_VHOST", "/");
+    // The default vhost "/" must be percent-encoded as "%2F" in the URI path
+    String encodedVhost = vhost.equals("/") ? "%2F" : vhost;
+
     String uri = (useTls ? "amqps" : "amqp")
       + "://" + config.getString("RABBITMQ_USER", "guest")
       + ":" + config.getString("RABBITMQ_PASS", "guest")
       + "@" + config.getString("RABBITMQ_HOST", "rabbitmq")
       + ":" + config.getString("RABBITMQ_PORT", "5672")
-      + "/" + config.getString("RABBITMQ_VHOST", "/");
+      + "/" + encodedVhost;
 
     RabbitMQClient client = RabbitMQClient.create(vertx,
       new RabbitMQOptions()

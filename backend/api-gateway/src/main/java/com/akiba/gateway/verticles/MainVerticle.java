@@ -4,6 +4,7 @@ import com.akiba.gateway.middleware.JwtMiddleware;
 import com.akiba.gateway.middleware.RateLimitMiddleware;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpMethod;
@@ -132,7 +133,6 @@ public class MainVerticle extends VerticleBase {
     return router;
   }
 
-  // Proxy
   private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
     String method  = ctx.request().method().name();
@@ -144,7 +144,14 @@ public class MainVerticle extends VerticleBase {
         ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
         req.putHeader("X-User-Id",   userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
-        return req.send(ctx.body().buffer());
+
+        // ── FIX: safely handle null body for GET/DELETE requests ─────────
+        Buffer body = ctx.body().buffer();
+        if (body != null && body.length() > 0) {
+          return req.send(body);
+        } else {
+          return req.send();
+        }
       })
       .onSuccess(upstreamRes -> {
         long ms = System.currentTimeMillis() - startTime;
@@ -156,16 +163,14 @@ public class MainVerticle extends VerticleBase {
           ctx.response().putHeader(h.getKey(), h.getValue()));
 
         upstreamRes.body()
-          .onSuccess(body -> {
-            // body is null on 204 No Content or empty responses — end cleanly
-            if (body != null && body.length() > 0) {
-              ctx.response().end(body);
+          .onSuccess(respBody -> {
+            if (respBody != null && respBody.length() > 0) {
+              ctx.response().end(respBody);
             } else {
               ctx.response().end();
             }
           })
           .onFailure(err -> {
-            // body read failed — end cleanly rather than leaving connection hanging
             System.err.println("[ApiGateway] ⚠️ Could not read response body: " + err.getMessage());
             ctx.response().end();
           });
@@ -179,7 +184,6 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
-  // Health
   private void handleHealth(RoutingContext ctx) {
     ctx.response()
       .setStatusCode(200)
@@ -190,7 +194,6 @@ public class MainVerticle extends VerticleBase {
         .encode());
   }
 
-  // JWT Setup
   private JWTAuth createJwtAuth() {
     String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");
     return JWTAuth.create(vertx, new JWTAuthOptions()
