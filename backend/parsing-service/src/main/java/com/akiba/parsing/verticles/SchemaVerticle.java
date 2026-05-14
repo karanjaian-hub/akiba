@@ -4,6 +4,7 @@ import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.SslMode;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 

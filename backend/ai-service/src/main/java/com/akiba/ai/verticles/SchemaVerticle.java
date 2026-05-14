@@ -5,6 +5,7 @@ import io.vertx.core.Promise;
 import io.vertx.core.internal.VertxBootstrap;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.SslMode;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.launcher.application.VertxApplication;

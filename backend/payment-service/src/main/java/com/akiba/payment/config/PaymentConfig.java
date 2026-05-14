@@ -3,6 +3,7 @@ package com.akiba.payment.config;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.SslMode;
 import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.RedisOptions;
 import io.vertx.sqlclient.Pool;
