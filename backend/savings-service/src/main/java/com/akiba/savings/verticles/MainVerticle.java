@@ -77,18 +77,18 @@ public class MainVerticle extends VerticleBase {
 
   private Pool buildPool(JsonObject config) {
     PgConnectOptions connectOptions = new PgConnectOptions()
-      .setHost(config.getString("DB_HOST", "postgres"))
-      .setPort(Integer.parseInt(config.getString("DB_PORT", "5432")))
-      .setDatabase(config.getString("DB_NAME", "akiba_db"))
-      .setUser(config.getString("DB_USER", "akiba"))
-      .setPassword(config.getString("DB_PASS", "akiba_secret"));
-
+      .setHost(System.getenv().getOrDefault("DB_HOST", "postgres"))
+      .setPort(Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "5432")))
+      .setDatabase(System.getenv().getOrDefault("DB_NAME", "akiba_db"))
+      .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
+      .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"));
     return PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(5))
       .connectingTo(connectOptions)
       .using(vertx)
       .build();
   }
+  
   private RedisAPI buildRedis(JsonObject config) {
     String host     = config.getString("REDIS_HOST", "redis");
     String port     = config.getString("REDIS_PORT", "6379");

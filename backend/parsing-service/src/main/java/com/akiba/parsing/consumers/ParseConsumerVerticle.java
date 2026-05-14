@@ -123,7 +123,6 @@ public class ParseConsumerVerticle extends VerticleBase {
         + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
         + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
       )
-      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")).getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
-      .setAutomaticRecoveryEnabled(true);
+      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671"))
   }
 }
