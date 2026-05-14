@@ -54,7 +54,8 @@ public class AppConfig {
       .setPort(config.dbPort)
       .setDatabase(config.dbName)
       .setUser(config.dbUser)
-      .setPassword(config.dbPass);
+      .setPassword(config.dbPass)
+      .setSslMode(SslMode.REQUIRE);
 
     PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
 

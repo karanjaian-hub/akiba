@@ -11,6 +11,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.SslMode;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.redis.client.Redis;
@@ -81,14 +82,15 @@ public class MainVerticle extends VerticleBase {
       .setPort(Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "5432")))
       .setDatabase(System.getenv().getOrDefault("DB_NAME", "akiba_db"))
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
-      .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"));
+      .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
+      .setSslMode(SslMode.REQUIRE);
     return PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(5))
       .connectingTo(connectOptions)
       .using(vertx)
       .build();
   }
-  
+
   private RedisAPI buildRedis(JsonObject config) {
     String host     = config.getString("REDIS_HOST", "redis");
     String port     = config.getString("REDIS_PORT", "6379");

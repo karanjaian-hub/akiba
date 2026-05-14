@@ -55,7 +55,9 @@ public class SchemaVerticle extends VerticleBase {
       .setPort(Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "5432")))
       .setDatabase(System.getenv().getOrDefault("DB_NAME", "akiba_db"))
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
-      .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"));
+      .setPassword(System.getenv()
+      .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
+      .setSslMode(SslMode.REQUIRE);
 
     return PgBuilder.pool()
       .connectingTo(connectOptions)
