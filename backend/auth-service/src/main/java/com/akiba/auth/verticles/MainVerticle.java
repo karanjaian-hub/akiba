@@ -51,7 +51,6 @@ public class MainVerticle extends VerticleBase {
       .setPort(Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "5432")))
       .setDatabase(System.getenv().getOrDefault("DB_NAME", "akiba_db"))
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
-      .setPassword(System.getenv()
       .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
       .setSslMode(SslMode.REQUIRE)
       .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
