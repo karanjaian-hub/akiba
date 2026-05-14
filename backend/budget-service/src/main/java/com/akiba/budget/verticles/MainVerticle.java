@@ -97,7 +97,13 @@ public class MainVerticle extends VerticleBase {
 
     private RabbitMQClient buildRabbitMQClient() {
         return RabbitMQClient.create(vertx,
-            new RabbitMQOptions().setHost(System.getenv("RABBITMQ_HOST")));
+          new RabbitMQOptions()
+            .setHost(System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq"))
+            .setPort(Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672")))
+            .setUser(System.getenv().getOrDefault("RABBITMQ_USER", "guest"))
+            .setPassword(System.getenv().getOrDefault("RABBITMQ_PASS", "guest"))
+            .setVirtualHost(System.getenv().getOrDefault("RABBITMQ_VHOST", "/"))
+            .setSsl(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671")));
     }
 
   private RedisAPI buildRedisApi() {

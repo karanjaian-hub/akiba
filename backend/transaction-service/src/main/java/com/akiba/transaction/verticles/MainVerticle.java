@@ -93,10 +93,22 @@ public class MainVerticle extends VerticleBase {
             .build();
     }
 
-    private RabbitMQClient buildRabbitMQClient() {
-        return RabbitMQClient.create(vertx,
-            new RabbitMQOptions().setHost(System.getenv("RABBITMQ_HOST")));
-    }
+  private RabbitMQClient buildRabbitMQClient() {
+    String host     = System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq");
+    String user     = System.getenv().getOrDefault("RABBITMQ_USER", "guest");
+    String pass     = System.getenv().getOrDefault("RABBITMQ_PASS", "guest");
+    String vhost    = System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
+    int    port     = Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672"));
+    boolean tls     = System.getenv().getOrDefault("RABBITMQ_TLS", "false").equals("true");
+
+    return RabbitMQClient.create(vertx, new RabbitMQOptions()
+      .setHost(host)
+      .setPort(port)
+      .setUser(user)
+      .setPassword(pass)
+      .setVirtualHost(vhost)
+      .setSsl(tls));
+  }
 
     private int servicePort() {
         String port = System.getenv("SERVICE_PORT");

@@ -117,9 +117,11 @@ public class ParseConsumerVerticle extends VerticleBase {
   private RabbitMQOptions buildRabbitMQOptions() {
     return new RabbitMQOptions()
       .setHost(System.getenv().getOrDefault("RABBITMQ_HOST", "localhost"))
-      .setPort(5672)
-      .setUser("guest")
-      .setPassword("guest")
+      .setPort(Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672")))
+      .setUser(System.getenv().getOrDefault("RABBITMQ_USER", "guest"))
+      .setPassword(System.getenv().getOrDefault("RABBITMQ_PASS", "guest"))
+      .setVirtualHost(System.getenv().getOrDefault("RABBITMQ_VHOST", "/"))
+      .setSsl(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
       .setAutomaticRecoveryEnabled(true);
   }
 }

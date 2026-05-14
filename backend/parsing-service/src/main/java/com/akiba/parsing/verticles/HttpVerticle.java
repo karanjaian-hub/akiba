@@ -33,7 +33,11 @@ public class HttpVerticle extends VerticleBase {
   private Future<RabbitMQClient> startRabbitMQ() {
     RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()
       .setHost(System.getenv().getOrDefault("RABBITMQ_HOST", "localhost"))
-      .setPort(5672)
+      .setPort(Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672")))
+      .setUser(System.getenv().getOrDefault("RABBITMQ_USER", "guest"))
+      .setPassword(System.getenv().getOrDefault("RABBITMQ_PASS", "guest"))
+      .setVirtualHost(System.getenv().getOrDefault("RABBITMQ_VHOST", "/"))
+      .setSsl(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
       .setAutomaticRecoveryEnabled(true));
 
     return client.start()

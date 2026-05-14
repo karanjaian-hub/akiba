@@ -115,7 +115,9 @@ public class MainVerticle extends VerticleBase {
       .setHost(config.getString("RABBITMQ_HOST", "rabbitmq"))
       .setPort(Integer.parseInt(config.getString("RABBITMQ_PORT", "5672")))
       .setUser(config.getString("RABBITMQ_USER", "guest"))
-      .setPassword(config.getString("RABBITMQ_PASS", "guest")));
+      .setPassword(config.getString("RABBITMQ_PASS", "guest"))
+      .setVirtualHost(config.getString("RABBITMQ_VHOST", "/"))
+      .setSsl(config.getString("RABBITMQ_PORT", "5672").equals("5671")));
     client.start()
       .onFailure(err -> log.error("RabbitMQ connection failed", err));
     return client;

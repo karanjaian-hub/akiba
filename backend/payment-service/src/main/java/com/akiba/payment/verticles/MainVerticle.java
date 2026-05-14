@@ -53,9 +53,11 @@ public class MainVerticle extends AbstractVerticle {
 
     RabbitMQOptions rmqOpts = new RabbitMQOptions()
       .setHost(PaymentConfig.rabbitmqHost())
-      .setPort(5672)
-      .setUser("guest")
-      .setPassword("guest")
+      .setPort(Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672")))
+      .setUser(System.getenv().getOrDefault("RABBITMQ_USER", "guest"))
+      .setPassword(System.getenv().getOrDefault("RABBITMQ_PASS", "guest"))
+      .setVirtualHost(System.getenv().getOrDefault("RABBITMQ_VHOST", "/"))
+      .setSsl(System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
       .setReconnectAttempts(10)
       .setReconnectInterval(3000);
 
