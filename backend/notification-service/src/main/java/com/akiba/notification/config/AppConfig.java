@@ -55,7 +55,8 @@ public class AppConfig {
       .setDatabase(config.dbName)
       .setUser(config.dbUser)
       .setPassword(config.dbPass)
-      .setSslMode(SslMode.REQUIRE);
+      .setSslMode(SslMode.REQUIRE)
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
 
     PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
 

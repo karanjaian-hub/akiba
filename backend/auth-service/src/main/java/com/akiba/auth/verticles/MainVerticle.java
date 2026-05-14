@@ -52,7 +52,8 @@ public class MainVerticle extends VerticleBase {
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
       .setPassword(System.getenv()
       .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
-      .setSslMode(SslMode.REQUIRE);
+      .setSslMode(SslMode.REQUIRE)
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
 
     pool = PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(10))

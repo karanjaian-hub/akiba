@@ -94,7 +94,8 @@ public class MainVerticle extends VerticleBase {
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
       .setPassword(System.getenv()
       .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
-      .setSslMode(SslMode.REQUIRE);
+      .setSslMode(SslMode.REQUIRE)
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
 
     // PgBuilder.pool() is the Vert.x 5 replacement for PgPool.pool().
     return PgBuilder.pool()

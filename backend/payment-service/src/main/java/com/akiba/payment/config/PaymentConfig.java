@@ -18,7 +18,8 @@ public class PaymentConfig {
       .setDatabase(env("DB_NAME", "akiba_db"))
       .setUser(env("DB_USER", "akiba"))
       .setPassword(env("DB_PASS", "akiba_secret")
-      .setSslMode(SslMode.REQUIRE));
+      .setSslMode(SslMode.REQUIRE)
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true)));
 
     PoolOptions pool = new PoolOptions().setMaxSize(10);
 

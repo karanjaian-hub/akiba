@@ -83,7 +83,8 @@ public class MainVerticle extends VerticleBase {
       .setDatabase(System.getenv().getOrDefault("DB_NAME", "akiba_db"))
       .setUser(System.getenv().getOrDefault("DB_USER", "akiba"))
       .setPassword(System.getenv().getOrDefault("DB_PASS", "akiba_secret"))
-      .setSslMode(SslMode.REQUIRE);
+      .setSslMode(SslMode.REQUIRE)
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
     return PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(5))
       .connectingTo(connectOptions)
