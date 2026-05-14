@@ -112,13 +112,14 @@ public class MainVerticle extends VerticleBase {
   }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
     RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()
-      .setHost(config.getString("RABBITMQ_HOST", "rabbitmq"))
-      .setPort(Integer.parseInt(config.getString("RABBITMQ_PORT", "5672")))
-      .setUser(config.getString("RABBITMQ_USER", "guest"))
-      .setPassword(config.getString("RABBITMQ_PASS", "guest"))
-      .setVirtualHost(config.getString("RABBITMQ_VHOST", "/"))
-      .setSsl(config.getString("RABBITMQ_PORT", "5672").equals("5671"))
-      .setTrustAll(config.getString("RABBITMQ_PORT", "5672").equals("5671")));
+      .setUri((config.getString("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
+        + "://" + config.getString("RABBITMQ_USER","guest")
+        + ":" + config.getString("RABBITMQ_PASS","guest")
+        + "@" + config.getString("RABBITMQ_HOST","rabbitmq")
+        + ":" + config.getString("RABBITMQ_PORT","5672")
+        + "/" + config.getString("RABBITMQ_VHOST","/")
+      )
+      .setTrustAll(config.getString("RABBITMQ_PORT","5672").equals("5671")).equals("5671")));
     client.start()
       .onFailure(err -> log.error("RabbitMQ connection failed", err));
     return client;

@@ -101,16 +101,18 @@ public class MainVerticle extends VerticleBase {
     int    port  = Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672"));
     boolean tls  = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
 
-    RabbitMQOptions opts = new RabbitMQOptions()
-      .setHost(host)
-      .setPort(port)
-      .setUser(user)
-      .setPassword(pass)
-      .setVirtualHost(vhost)
-      .setSsl(tls)
-      .setTrustAll(tls);
+    String scheme = tls ? "amqps" : "amqp";
+    String uri = scheme + "://" + user + ":" + pass + "@" + host + ":" + port + "/" + vhost;
 
-    return RabbitMQClient.create(vertx, opts);
+    return RabbitMQClient.create(vertx, new RabbitMQOptions()
+      .setUri((System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
+        + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
+        + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
+        + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
+        + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
+        + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
+      )
+      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")));
   }
 
     private int servicePort() {
