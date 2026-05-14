@@ -18,9 +18,9 @@ public class PaymentConfig {
       .setPort(Integer.parseInt(env("DB_PORT", "5432")))
       .setDatabase(env("DB_NAME", "akiba_db"))
       .setUser(env("DB_USER", "akiba"))
-      .setPassword(env("DB_PASS", "akiba_secret")
+      .setPassword(env("DB_PASS", "akiba_secret"))
       .setSslMode(SslMode.REQUIRE)
-      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true)));
+      .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
 
     PoolOptions pool = new PoolOptions().setMaxSize(10);
 
