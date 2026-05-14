@@ -173,10 +173,10 @@ public class SchemaVerticle extends VerticleBase {
     return pool.query("""
       INSERT INTO auth.users (full_name, email, phone, password_hash, role_id, status) VALUES
         ('Karanja Ian', 'karanjaian420@gmail.com', '0748492654',
-         '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+         '$2b$10$CrK5B3UbSuNHtkfQ/ktdtOuoESnrQRaIzKfhkR4W1mfkfzTCdKQve',
          (SELECT id FROM auth.roles WHERE name = 'ROLE_ADMIN'), 'ACTIVE'),
         ('Ian Karanja', 'iankaranja420@gmail.com', '0111824449',
-         '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHuu',
+         '$2b$10$CrK5B3UbSuNHtkfQ/ktdtOuoESnrQRaIzKfhkR4W1mfkfzTCdKQve',
          (SELECT id FROM auth.roles WHERE name = 'ROLE_USER'), 'ACTIVE')
       ON CONFLICT (email) DO NOTHING
       """).execute().mapEmpty();

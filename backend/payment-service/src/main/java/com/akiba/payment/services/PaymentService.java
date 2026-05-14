@@ -17,8 +17,6 @@ import java.util.UUID;
 
 public class PaymentService {
 
-  // Redis TTL for pending payment state — Daraja callbacks arrive within ~30s in practice,
-  // but we give 120s as a safety buffer before treating the payment as timed-out.
   private static final int PENDING_PAYMENT_TTL_SEC = 120;
 
   private final DarajaService     daraja;

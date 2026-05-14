@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.akiba.app.data.remote.api.BudgetApiService
 import com.akiba.app.data.remote.api.SavingsApiService
 import com.akiba.app.data.remote.api.TransactionApiService
+import com.akiba.app.data.remote.api.NotificationApiService
 import com.akiba.app.data.local.dataStore
 import com.akiba.app.data.remote.dto.BudgetOverviewDto
 import com.akiba.app.data.remote.dto.SavingsGoalDto
@@ -38,9 +39,10 @@ private val BALANCE_HIDDEN_KEY = booleanPreferencesKey("akiba_balance_hidden")
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val transactionApi : TransactionApiService,
-    private val budgetApi      : BudgetApiService,
-    private val savingsApi     : SavingsApiService,
+    private val transactionApi    : TransactionApiService,
+    private val budgetApi         : BudgetApiService,
+    private val savingsApi        : SavingsApiService,
+    private val notificationApi   : NotificationApiService,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -65,15 +67,21 @@ class DashboardViewModel @Inject constructor(
             val budgetDeferred   = async { runCatching { budgetApi.getBudgetOverview() } }
             val goalsDeferred    = async { runCatching { savingsApi.getGoals() } }
 
-            val summary  = summaryDeferred.await().getOrNull()?.body()
-            val budget   = budgetDeferred.await().getOrNull()?.body()
-            val goals    = goalsDeferred.await().getOrNull()?.body() ?: emptyList()
+            val summary  = summaryDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body()
+            val budget   = budgetDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body()
+            val goals    = goalsDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body() ?: emptyList()
+
+            // Fetch unread notification count from backend
+            val unreadCount = runCatching {
+                notificationApi.getUnreadCount().body()?.count ?: 0
+            }.getOrDefault(0)
 
             _uiState.update {
                 it.copy(
                     summary        = summary,
                     budgetOverview = budget,
                     goals          = goals,
+                    unreadCount    = unreadCount,
                     isLoading      = false,
                     error          = if (summary == null) "Failed to load dashboard" else null,
                 )

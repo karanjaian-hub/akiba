@@ -22,7 +22,6 @@ data class RegisterRequest(
 data class OtpRequest(
     val email : String,
     val otp   : String,
-    val type  : String, // "verify" or "reset"
 )
 
 data class RefreshRequest(
@@ -47,18 +46,19 @@ data class UpdateProfileRequest(
 // ── Auth responses ────────────────────────────────────────────────────────────
 
 data class AuthResponse(
-    @SerializedName("access_token")  val accessToken : String,
-    @SerializedName("refresh_token") val refreshToken: String,
-    val user                         : UserDto,
+    val accessToken : String,
+    val refreshToken: String,
+    val expiresIn   : Int    = 900,
+    val user        : UserDto,
 )
 
 data class UserDto(
-    val id                             : String,
-    @SerializedName("full_name")       val fullName      : String,
-    val email                          : String,
-    val phone                          : String,
-    @SerializedName("profile_picture") val profilePicture: String? = null,
-    @SerializedName("is_verified")     val isVerified    : Boolean = false,
+    val id          : String,
+    val fullName    : String,
+    val email       : String,
+    val role        : String  = "ROLE_USER",
+    val phone       : String? = null,
+    val profilePicture: String? = null,
 )
 
 data class MessageResponse(

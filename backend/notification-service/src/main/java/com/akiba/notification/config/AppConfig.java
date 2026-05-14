@@ -47,8 +47,7 @@ public class AppConfig {
     );
   }
 
-  // Vert.x 5: PgPool.pool() is gone — use PgBuilder instead
-  // Returns Pool (from io.vertx.sqlclient) not PgPool
+
   public static Pool buildPgPool(Vertx vertx, AppConfig config) {
     PgConnectOptions connectOptions = new PgConnectOptions()
       .setHost(config.dbHost)

@@ -26,6 +26,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.akiba.app.navigation.AkibaBottomBar
 import com.akiba.app.data.remote.api.BudgetApiService
 import com.akiba.app.data.remote.dto.BudgetDto
 import com.akiba.app.data.remote.dto.BudgetOverviewDto
@@ -62,7 +63,7 @@ class BudgetViewModel @Inject constructor(
     fun createBudget(category: String, limit: Double) {
         viewModelScope.launch {
             runCatching {
-                api.createBudget(mapOf("category" to category, "limit" to limit))
+                api.createBudget(mapOf("category" to category, "monthlyLimit" to limit))
             }.getOrNull()?.body()?.let { loadBudgets() }
         }
     }
@@ -97,6 +98,7 @@ fun BudgetScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = { AkibaBottomBar(navController) },
         topBar = {
             TopAppBar(
                 title = { Text("Budgets", fontFamily = SoraFontFamily,
@@ -123,7 +125,7 @@ fun BudgetScreen(
             modifier            = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding      = PaddingValues(16.dp),
+            contentPadding      = PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ── Donut chart ───────────────────────────────────────────────

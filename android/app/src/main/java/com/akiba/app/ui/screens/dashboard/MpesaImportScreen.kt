@@ -27,6 +27,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavHostController
+import com.akiba.app.data.remote.api.ParseApiService
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.launch
 import com.akiba.app.ui.components.common.*
 import com.akiba.app.ui.theme.*
 
@@ -190,7 +197,8 @@ fun MpesaImportScreen(navController: NavHostController) {
                 modifier = Modifier.fillMaxWidth(),
                 onClick  = {
                     isProcessing = true
-                    // TODO: wire to backend import endpoint in Phase 4 backend hookup
+                    // Wire to /parse/mpesa endpoint
+                    // viewModel.parseMpesa(smsText)  ← Phase 8 full implementation
                 },
             )
         }

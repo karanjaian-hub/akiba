@@ -39,7 +39,8 @@ class AuthRepository @Inject constructor(
 
     suspend fun verifyOtp(email: String, otp: String, type: String): Result<AuthResponse> =
         runCatching {
-            val response = api.verifyEmailOtp(OtpRequest(email, otp, type))
+            // Only email OTP — phone verification not implemented
+            val response = api.verifyEmailOtp(OtpRequest(email, otp))
             val body     = response.bodyOrThrow()
             saveAuthData(body)
             body
@@ -84,6 +85,14 @@ class AuthRepository @Inject constructor(
             prefs[PrefKeys.REFRESH_TOKEN] = auth.refreshToken
             prefs[PrefKeys.USER_JSON]     = gson.toJson(auth.user)
         }
+    }
+    
+    suspend fun getSavedUserName(): String {
+        val json = context.dataStore.data.first()[PrefKeys.USER_JSON] ?: return "User"
+        return try {
+            com.google.gson.JsonParser.parseString(json)
+                .asJsonObject.get("fullName")?.asString ?: "User"
+        } catch (e: Exception) { "User" }
     }
 
     private suspend fun clearAuthData() {

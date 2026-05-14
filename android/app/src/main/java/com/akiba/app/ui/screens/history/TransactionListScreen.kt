@@ -25,6 +25,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.akiba.app.navigation.AkibaBottomBar
 import com.akiba.app.data.remote.api.TransactionApiService
 import com.akiba.app.data.remote.dto.TransactionDto
 import com.akiba.app.ui.components.common.*
@@ -126,6 +127,7 @@ fun TransactionListScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = { AkibaBottomBar(navController) },
         topBar = {
             TopAppBar(
                 title = { Text("History", fontFamily = SoraFontFamily,
@@ -150,7 +152,7 @@ fun TransactionListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(bottom = 68.dp),
         ) {
             // ── Search bar ────────────────────────────────────────────────
             var searchFocused by remember { mutableStateOf(false) }

@@ -38,7 +38,11 @@ public class AlertHandler {
   }
 
   public Future<JsonObject> getAlerts(UUID userId, int page, int pageSize) {
-    int offset = (page - 1) * pageSize;
+    // Clamp both values — page 0 or negative causes a negative OFFSET in Postgres
+    int safePage = Math.max(1, page);
+    int safeSize = Math.max(1, Math.min(pageSize, 100));
+    int offset   = (safePage - 1) * safeSize;
+
     String sql = """
             SELECT id, type, title, body, is_read, created_at
             FROM notifications.alerts
@@ -47,7 +51,7 @@ public class AlertHandler {
             LIMIT $2 OFFSET $3
         """;
     return pgPool.preparedQuery(sql)
-      .execute(Tuple.of(userId, pageSize, offset))
+      .execute(Tuple.of(userId, safeSize, offset))
       .map(rows -> {
         var alerts = new JsonArray();
         rows.forEach(row -> alerts.add(new JsonObject()
@@ -60,8 +64,8 @@ public class AlertHandler {
         ));
         return new JsonObject()
           .put("alerts",    alerts)
-          .put("page",      page)
-          .put("page_size", pageSize);
+          .put("page",      safePage)
+          .put("page_size", safeSize);
       });
   }
 

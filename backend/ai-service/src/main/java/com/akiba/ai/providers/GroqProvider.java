@@ -10,29 +10,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-/**
- * GroqProvider sends prompts to Groq's inference API using the
- * OpenAI-compatible /v1/chat/completions endpoint.
- *
- * Endpoint:
- *   POST https://api.groq.com/openai/v1/chat/completions
- *   Headers: Authorization: Bearer <GROQ_API_KEY>
- *   Body: { "model": "...", "messages": [{role, content}, ...] }
- *
- * Why is this simpler than Gemini?
- *   Gemini uses a custom format with nested "parts" arrays and a
- *   separate "system_instruction" field. Groq uses the OpenAI format
- *   where system, user, and assistant messages all sit in one flat
- *   "messages" array — much cleaner to build and read.
- */
 public class GroqProvider implements AiProvider {
 
   private static final Logger log = LoggerFactory.getLogger(GroqProvider.class);
 
   private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-  // llama-3.3-70b-versatile: Groq's best free model.
-  // 70 billion parameters — excellent at financial reasoning and advice.
   private static final String MODEL = "llama-3.3-70b-versatile";
 
   private final WebClient webClient;
@@ -63,15 +46,6 @@ public class GroqProvider implements AiProvider {
       });
   }
 
-  /**
-   * Builds the OpenAI-format messages array.
-   *
-   * Message order: system → history (oldest first) → current user message.
-   * Groq/OpenAI roles: "system", "user", "assistant"
-   *
-   * Note: our DB stores AI messages with role "model" (Gemini's convention).
-   * We map "model" → "assistant" here so Groq understands it.
-   */
   private JsonObject buildRequestBody(String systemPrompt, String userMessage, List<Message> history) {
     JsonArray messages = new JsonArray();
 
@@ -107,13 +81,7 @@ public class GroqProvider implements AiProvider {
       .put("temperature", 0.7);
   }
 
-  /**
-   * Extracts the reply text from Groq's response.
-   *
-   * Groq/OpenAI response path: choices[0].message.content
-   * Much shallower than Gemini's: candidates[0].content.parts[0].text
-   */
-  private String extractReplyText(JsonObject responseBody) {
+   private String extractReplyText(JsonObject responseBody) {
     return responseBody
       .getJsonArray("choices")
       .getJsonObject(0)

@@ -15,17 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * AiRepository owns every SQL statement for the ai.* schema.
- *
- * Vert.x 5 changes:
- *   - Field type changed from PgPool → Pool (io.vertx.sqlclient.Pool).
- *     Pool is the Vert.x 5 unified interface — PgPool now extends Pool,
- *     so accepting Pool here makes the repository testable with any
- *     SQL backend and avoids importing the Postgres-specific type.
- *   - SMALLINT columns (month, year) require short in Tuple, not int.
- *     Passing int to a SMALLINT param throws a codec error in v5 strict mode.
- */
 public class AiRepository {
 
   private static final Logger log = LoggerFactory.getLogger(AiRepository.class);
@@ -36,8 +25,7 @@ public class AiRepository {
     this.pool = pool;
   }
 
-  // ── Conversations ──────────────────────────────────────────────────────────
-
+  // Conversations
   public Future<Conversation> createConversation(UUID userId, String title) {
     return pool.preparedQuery(
         "INSERT INTO ai.conversations (id, user_id, title, created_at, updated_at) " +
@@ -57,8 +45,7 @@ public class AiRepository {
       });
   }
 
-  // ── Messages ───────────────────────────────────────────────────────────────
-
+  // Messages
   public Future<Message> saveMessage(UUID conversationId, String role, String content) {
     return pool.preparedQuery(
         "INSERT INTO ai.messages (id, conversation_id, role, content, created_at) " +
@@ -67,12 +54,6 @@ public class AiRepository {
       .map(rows -> rowToMessage(rows.iterator().next()));
   }
 
-  /**
-   * Returns the most recent `limit` messages in chronological order.
-   * Subquery fetches newest-first (DESC), outer query re-sorts oldest-first (ASC)
-   * so Gemini receives history in the correct temporal order.
-   * Capped at 20 to keep context window costs reasonable.
-   */
   public Future<List<Message>> findRecentMessages(UUID conversationId, int limit) {
     return pool.preparedQuery(
         "SELECT * FROM (" +
@@ -87,11 +68,9 @@ public class AiRepository {
       });
   }
 
-  // ── Reports ────────────────────────────────────────────────────────────────
-
+  // Reports
   public Future<Report> createReport(UUID userId, int month, int year) {
-    // Cast to short — Postgres SMALLINT requires a 16-bit integer.
-    // Vert.x 5 enforces strict type matching; passing int causes a codec error.
+
     return pool.preparedQuery(
         "INSERT INTO ai.reports (id, user_id, month, year, status, created_at) " +
           "VALUES ($1, $2, $3, $4, 'GENERATING', NOW()) RETURNING *"
@@ -113,8 +92,7 @@ public class AiRepository {
       .map(rows -> rows.rowCount() == 0 ? null : rowToReport(rows.iterator().next()));
   }
 
-  // ── Row mappers ────────────────────────────────────────────────────────────
-
+  // Row mappers
   private Conversation rowToConversation(Row row) {
     Conversation c = new Conversation();
     c.id        = row.getUUID("id");

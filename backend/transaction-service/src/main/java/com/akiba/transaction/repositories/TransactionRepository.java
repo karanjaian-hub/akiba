@@ -46,13 +46,17 @@ public class TransactionRepository {
       // OffsetDateTime handles the trailing "Z" (UTC) that Postman sends.
       // LocalDateTime.parse handles plain timestamps with no timezone.
       LocalDateTime parsedDate;
+      // After
       try {
-        if (dateStr != null && (dateStr.endsWith("Z") || dateStr.contains("+"))) {
+        if (dateStr == null) {
+          return Future.failedFuture("date or transaction_date is required");
+        } else if (dateStr.endsWith("Z") || dateStr.contains("+")) {
           parsedDate = OffsetDateTime.parse(dateStr).toLocalDateTime();
-        } else if (dateStr != null) {
+        } else if (dateStr.contains("T")) {
           parsedDate = LocalDateTime.parse(dateStr);
         } else {
-          return Future.failedFuture("date or transaction_date is required");
+          // Plain date from AI parser e.g. "2025-04-10" → append midnight time
+          parsedDate = LocalDateTime.parse(dateStr + "T00:00:00");
         }
       } catch (Exception e) {
         return Future.failedFuture("Invalid date format: " + dateStr);

@@ -4,10 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Represents a single payment record in our system.
- * Status lifecycle: PENDING → COMPLETED | FAILED
- */
+// Represents a single payment record
+// Status lifecycle: PENDING → COMPLETED | FAILED
 public class Payment {
 
   public enum Status { PENDING, COMPLETED, FAILED }
@@ -28,8 +26,7 @@ public class Payment {
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
 
-  // ── Getters & Setters ──────────────────────────────────────────────────────
-
+  // Getters & Setters
   public UUID getId()                        { return id; }
   public void setId(UUID id)                 { this.id = id; }
 

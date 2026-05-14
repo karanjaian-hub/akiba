@@ -4,6 +4,9 @@ import android.content.Context
 import com.akiba.app.BuildConfig
 import com.akiba.app.data.local.PrefKeys
 import com.akiba.app.data.remote.api.*
+import com.akiba.app.data.remote.api.AiApiService
+import com.akiba.app.data.remote.api.ParseApiService
+import com.akiba.app.data.remote.api.NotificationApiService
 import com.akiba.app.data.remote.api.PaymentApiService
 import com.akiba.app.data.local.dataStore
 import dagger.Module
@@ -45,9 +48,10 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .addInterceptor(logging)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .connectionPool(okhttp3.ConnectionPool(5, 30, TimeUnit.SECONDS))
             .build()
     }
 
@@ -59,6 +63,18 @@ object NetworkModule {
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
+
+    @Provides @Singleton
+    fun provideParseApiService(retrofit: Retrofit): ParseApiService =
+        retrofit.create(ParseApiService::class.java)
+
+    @Provides @Singleton
+    fun provideAiApiService(retrofit: Retrofit): AiApiService =
+        retrofit.create(AiApiService::class.java)
+
+    @Provides @Singleton
+    fun provideNotificationApiService(retrofit: Retrofit): NotificationApiService =
+        retrofit.create(NotificationApiService::class.java)
 
     @Provides @Singleton
     fun providePaymentApiService(retrofit: Retrofit): PaymentApiService =

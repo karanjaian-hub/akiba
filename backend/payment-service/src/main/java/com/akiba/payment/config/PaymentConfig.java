@@ -35,16 +35,17 @@ public class PaymentConfig {
     );
   }
 
-  // Daraja
+  // Daraja saf configs
   public static String darajaConsumerKey()    { return require("DARAJA_CONSUMER_KEY"); }
   public static String darajaConsumerSecret() { return require("DARAJA_CONSUMER_SECRET"); }
   public static String darajaShortcode()      { return require("DARAJA_SHORTCODE"); }
   public static String darajaPasskey()        { return require("DARAJA_PASSKEY"); }
   public static String darajaCallbackUrl()    { return require("DARAJA_CALLBACK_URL"); }
 
-  // Service
+  // Service config 
   public static int    servicePort()          { return Integer.parseInt(env("SERVICE_PORT", "8085")); }
   public static String budgetServiceUrl()     { return env("BUDGET_SERVICE_URL", "http://budget-service:8086"); }
+  public static String jwtSecret()        { return require("JWT_SECRET"); }
   public static String rabbitmqHost()         { return env("RABBITMQ_HOST", "rabbitmq"); }
 
   // Helpers

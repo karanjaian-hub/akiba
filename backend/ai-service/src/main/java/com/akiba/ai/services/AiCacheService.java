@@ -10,16 +10,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
-/**
- * AiCacheService wraps Redis to cache AI responses.
- *
- * Why cache? Gemini API calls cost money and take ~1–3 seconds.
- * Many users ask very similar questions ("Am I overspending?").
- * Caching identical prompt hashes means we pay once and serve fast.
- *
- * TTL = 3600 seconds (1 hour). Financial data changes daily,
- * so we don't want stale answers living longer than that.
- */
 public class AiCacheService {
 
   private static final Logger log = LoggerFactory.getLogger(AiCacheService.class);
@@ -56,11 +46,7 @@ public class AiCacheService {
       .mapEmpty();
   }
 
-  /**
-   * Hashes the combined prompt so similar (but not identical) prompts
-   * don't collide. SHA-256 gives us a 64-char hex string — compact
-   * and collision-resistant enough for a cache key.
-   */
+
   private String buildCacheKey(String systemPrompt, String userMessage) {
     String combined = systemPrompt + "|" + userMessage;
     try {

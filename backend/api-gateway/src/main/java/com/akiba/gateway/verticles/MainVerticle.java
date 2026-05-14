@@ -74,12 +74,12 @@ public class MainVerticle extends VerticleBase {
 
     router.get("/health").handler(this::handleHealth);
 
-    // Public Routes
+    // Public
     router.post("/auth/register").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/login").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/refresh").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
 
-    // Protected Routes
+    // Protected
     router.route("/auth/*")
       .handler(jwtMiddleware::handle)
       .handler(ctx -> proxyTo(ctx, "auth-service", 8081));
@@ -119,14 +119,14 @@ public class MainVerticle extends VerticleBase {
   // Proxy
   private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
-    String method = ctx.request().method().name();
-    String path = ctx.request().uri();
-    String userId = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
+    String method  = ctx.request().method().name();
+    String path    = ctx.request().uri();
+    String userId  = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
 
     httpClient.request(ctx.request().method(), port, service, path)
       .compose(req -> {
         ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
-        req.putHeader("X-User-Id", userId);
+        req.putHeader("X-User-Id",   userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
         return req.send(ctx.body().buffer());
       })
@@ -134,10 +134,25 @@ public class MainVerticle extends VerticleBase {
         long ms = System.currentTimeMillis() - startTime;
         System.out.printf("[ApiGateway] %s %s → %s (%dms) userId=%s%n",
           method, path, service, ms, userId);
+
         ctx.response().setStatusCode(upstreamRes.statusCode());
         upstreamRes.headers().forEach(h ->
           ctx.response().putHeader(h.getKey(), h.getValue()));
-        upstreamRes.body().onSuccess(body -> ctx.response().end(body));
+
+        upstreamRes.body()
+          .onSuccess(body -> {
+            // body is null on 204 No Content or empty responses — end cleanly
+            if (body != null && body.length() > 0) {
+              ctx.response().end(body);
+            } else {
+              ctx.response().end();
+            }
+          })
+          .onFailure(err -> {
+            // body read failed — end cleanly rather than leaving connection hanging
+            System.err.println("[ApiGateway] ⚠️ Could not read response body: " + err.getMessage());
+            ctx.response().end();
+          });
       })
       .onFailure(err -> {
         System.err.println("[ApiGateway] ❌ Proxy failed → " + service + ": " + err.getMessage());

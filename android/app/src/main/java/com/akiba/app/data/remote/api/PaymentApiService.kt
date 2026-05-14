@@ -12,7 +12,7 @@ interface PaymentApiService {
     @POST("payments/initiate")
     suspend fun initiatePayment(@Body request: PaymentRequest): Response<PaymentInitResponse>
 
-    @GET("payments/{paymentId}/status")
+    @GET("payments/status/{paymentId}")
     suspend fun getPaymentStatus(@Path("paymentId") paymentId: String): Response<PaymentStatus>
 
     @GET("payments/history")

@@ -14,9 +14,9 @@ interface BudgetApiService {
     @GET("budgets/overview")
     suspend fun getBudgetOverview(): Response<BudgetOverviewDto>
 
-    @GET("budgets/check")
+    @GET("budgets/{category}/check")
     suspend fun checkBudget(
-        @Query("category") category: String,
+        @Path("category")  category: String,
         @Query("amount")   amount  : Double,
     ): Response<BudgetCheckResult>
 

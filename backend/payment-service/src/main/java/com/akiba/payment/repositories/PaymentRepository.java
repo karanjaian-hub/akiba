@@ -20,8 +20,7 @@ public class PaymentRepository {
     this.db = db;
   }
 
-  // Payments
-  /** Insert a fresh PENDING payment and return it with the generated ID. */
+
   public Future<Payment> insertPayment(Payment payment) {
     String sql = """
             INSERT INTO payments.records
@@ -54,10 +53,6 @@ public class PaymentRepository {
       });
   }
 
-  /**
-   * Called by the Daraja callback to update a payment's final state.
-   * ResultCode "0" = success; anything else = failure.
-   */
   public Future<Void> updatePaymentStatus(
     String checkoutRequestId, Payment.Status status,
     String resultCode, String resultDesc) {
@@ -87,7 +82,7 @@ public class PaymentRepository {
       });
   }
 
-  /** Find a payment by Daraja's checkout ID — used to locate the record during callback. */
+  // Find a payment
   public Future<Payment> findByCheckoutRequestId(String checkoutRequestId) {
     String sql = "SELECT * FROM payments.records WHERE checkout_request_id = $1";
     return db.preparedQuery(sql)
@@ -98,8 +93,8 @@ public class PaymentRepository {
       });
   }
 
-  /** Paginated payment history for the authenticated user — newest first. */
-  public Future<List<Payment>> findPaymentHistory(UUID userId, int page, int size) {
+  //Paginated payment history for the authenticated user — newest first..
+  public Future<List<Payment>> findPaymentHistory(UUID userId, int offset, int size) {
     String sql = """
             SELECT * FROM payments.records
             WHERE user_id = $1
@@ -108,7 +103,7 @@ public class PaymentRepository {
             """;
 
     return db.preparedQuery(sql)
-      .execute(Tuple.of(userId, size, (page - 1) * size))
+      .execute(Tuple.of(userId, size, offset))
       .map(rows -> {
         List<Payment> payments = new ArrayList<>();
         rows.forEach(row -> payments.add(rowToPayment(row)));
@@ -116,12 +111,10 @@ public class PaymentRepository {
       });
   }
 
-  // ── Recipients ─────────────────────────────────────────────────────────────
+  // Recipients
+  // Upsert — if the user has paid this identifier before, increment use_count.
+  // Otherwise insert a new row. This keeps the "recent recipients" list accurate
 
-  /**
-   * Upsert — if the user has paid this identifier before, increment use_count.
-   * Otherwise insert a new row. This keeps the "recent recipients" list accurate.
-   */
   public Future<Void> upsertRecipient(UUID userId, String identifier, String nickname,
                                       String category, String type) {
     String sql = """
@@ -140,7 +133,7 @@ public class PaymentRepository {
       .mapEmpty();
   }
 
-  /** Returns saved recipients sorted by use_count — so frequently used ones appear first. */
+  // Returns saved recipients sorted by use_count — so frequently used ones appear first...
   public Future<List<SavedRecipient>> findRecipients(UUID userId) {
     String sql = """
             SELECT * FROM payments.recipients
@@ -171,8 +164,7 @@ public class PaymentRepository {
       .mapEmpty();
   }
 
-  // ── Row mappers ────────────────────────────────────────────────────────────
-
+  // Row mappers
   private Payment rowToPayment(Row row) {
     Payment p = new Payment();
     p.setId(row.getUUID("id"));

@@ -36,7 +36,7 @@ public class SavingsHandler {
   // ── GET /savings/goals ────────────────────────────────────────────────────
 
   public void getGoals(RoutingContext ctx) {
-    String userId = ctx.user().subject();
+    String userId = ctx.get("userId");
     repository.getActiveGoals(userId)
       .compose(goalRows -> enrichGoalsFromCache(userId, goalRows))
       .onSuccess(goals -> ctx.response()
@@ -71,7 +71,7 @@ public class SavingsHandler {
 
   public void createGoal(RoutingContext ctx) {
     JsonObject body   = ctx.body().asJsonObject();
-    String     userId = ctx.user().subject();
+    String     userId = ctx.get("userId");
 
     if (body == null || body.getString("name") == null
       || body.getDouble("targetAmount") == null
@@ -95,7 +95,7 @@ public class SavingsHandler {
 
   public void updateGoal(RoutingContext ctx) {
     String goalId  = ctx.pathParam("id");
-    String userId  = ctx.user().subject();
+    String userId  = ctx.get("userId");
     JsonObject updates = ctx.body().asJsonObject();
 
     if (updates == null) { replyError(ctx, 400, "Request body required"); return; }
@@ -113,7 +113,7 @@ public class SavingsHandler {
 
   public void archiveGoal(RoutingContext ctx) {
     String goalId = ctx.pathParam("id");
-    String userId = ctx.user().subject();
+    String userId = ctx.get("userId");
 
     repository.archiveGoal(goalId, userId)
       .compose(v -> invalidateCache(userId, goalId))
@@ -128,7 +128,7 @@ public class SavingsHandler {
 
   public void addManualContribution(RoutingContext ctx) {
     String goalId   = ctx.pathParam("id");
-    String userId   = ctx.user().subject();
+    String userId   = ctx.get("userId");
     JsonObject body = ctx.body().asJsonObject();
 
     if (body == null || body.getDouble("amount") == null) {
@@ -166,7 +166,7 @@ public class SavingsHandler {
 
   public void getContributionHistory(RoutingContext ctx) {
     String goalId = ctx.pathParam("id");
-    String userId = ctx.user().subject();
+    String userId = ctx.get("userId");
 
     repository.getContributionHistory(goalId, userId)
       .onSuccess(history -> ctx.response()

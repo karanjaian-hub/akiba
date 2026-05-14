@@ -28,6 +28,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.akiba.app.navigation.AkibaBottomBar
 import com.akiba.app.data.remote.api.SavingsApiService
 import com.akiba.app.data.remote.dto.SavingsGoalDto
 import com.akiba.app.ui.components.common.*
@@ -63,12 +64,11 @@ class SavingsViewModel @Inject constructor(
     fun createGoal(name: String, emoji: String, target: Double, deadline: String?) {
         viewModelScope.launch {
             runCatching {
-                api.createGoal(buildMap {
-                    put("name",   name)
-                    put("emoji",  emoji)
-                    put("target_amount", target)
-                    if (deadline != null) put("deadline", deadline)
-                })
+                api.createGoal(mapOf(
+                    "name"          to name,
+                    "emoji"         to emoji,
+                    "target_amount" to target,
+                ))
             }.getOrNull()?.body()?.let { loadGoals() }
         }
     }
@@ -133,6 +133,7 @@ fun GoalsScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = { AkibaBottomBar(navController) },
         topBar = {
             TopAppBar(
                 title = { Text("Goals", fontFamily = SoraFontFamily,
@@ -157,7 +158,7 @@ fun GoalsScreen(
     ) { padding ->
         LazyColumn(
             modifier            = Modifier.fillMaxSize().padding(padding),
-            contentPadding      = PaddingValues(16.dp),
+            contentPadding      = PaddingValues(start=16.dp, end=16.dp, top=16.dp, bottom=80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ── Summary card ──────────────────────────────────────────────
@@ -412,7 +413,7 @@ private fun AddGoalSheet(
 
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                 columns          = androidx.compose.foundation.lazy.grid.GridCells.Fixed(5),
-                modifier         = Modifier.height(160.dp),
+                modifier         = Modifier.heightIn(max = 200.dp),
                 verticalArrangement   = Arrangement.spacedBy(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

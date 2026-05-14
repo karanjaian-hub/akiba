@@ -32,20 +32,20 @@ public class JwtMiddleware {
         JsonObject principal = user.principal();
         String jti           = principal.getString("jti");
 
-        // Checks if this token is blacklsted
+        // Check if token is blacklsted
         return redis.get("blacklist:" + jti)
           .compose(blacklisted -> {
             if (blacklisted != null) {
               return io.vertx.core.Future.failedFuture("Token has been revoked.");
             }
 
-            // Attach claims so downstream handlers don't re-parse the JWT
+            // Attach claims
             ctx.put("userId",      principal.getString("sub"));
             ctx.put("role",        principal.getString("role"));
             ctx.put("permissions", principal.getJsonArray("permissions"));
             ctx.put("jti",         jti);
 
-            // Remaining TTL used by LogoutHandler to set blacklist expiry
+            // Remaining TTL,, is used by LogoutHandler to set blacklist expiry
             long exp         = principal.getLong("exp", 0L);
             long now         = System.currentTimeMillis() / 1000;
             int remainingTtl = (int) Math.max(0, exp - now);

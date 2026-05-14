@@ -15,15 +15,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.akiba.app.data.remote.api.NotificationApiService
 import com.akiba.app.ui.components.common.*
 import com.akiba.app.ui.theme.*
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-// ── Notification model ────────────────────────────────────────────────────────
 data class AppNotification(
     val id      : String = java.util.UUID.randomUUID().toString(),
     val type    : NotificationType,
@@ -37,68 +47,87 @@ enum class NotificationType {
     PAYMENT, BUDGET_EXCEEDED, GOAL_ACHIEVED, SAVINGS_NUDGE, REPORT_READY, SYSTEM_ERROR
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NotificationsScreen(navController: NavHostController) {
-    val primary   = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
-    val accent    = MaterialTheme.akibaColors.accentGreen
-    val gold      = MaterialTheme.akibaColors.gold
-    val error     = MaterialTheme.colorScheme.error
+@HiltViewModel
+class NotificationViewModel @Inject constructor(
+    private val api: NotificationApiService,
+) : ViewModel() {
 
-    // Sample notifications — replaced by real data from notification-service in production
-    var notifications by remember {
-        mutableStateOf(listOf(
-            AppNotification(type = NotificationType.PAYMENT,
-                title   = "Payment Successful",
-                message = "Ksh 1,200 sent to Jane Doe via M-Pesa",
-                timeAgo = "2 min ago", isRead = false),
-            AppNotification(type = NotificationType.BUDGET_EXCEEDED,
-                title   = "Budget Alert",
-                message = "You've used 92% of your Food budget this month",
-                timeAgo = "1 hr ago", isRead = false),
-            AppNotification(type = NotificationType.GOAL_ACHIEVED,
-                title   = "Goal Achieved! 🎉",
-                message = "You've reached your Emergency Fund goal of Ksh 50,000",
-                timeAgo = "3 hrs ago", isRead = false),
-            AppNotification(type = NotificationType.SAVINGS_NUDGE,
-                title   = "Savings Reminder",
-                message = "You're Ksh 2,000 behind on your Laptop savings goal",
-                timeAgo = "Yesterday", isRead = true),
-            AppNotification(type = NotificationType.REPORT_READY,
-                title   = "Monthly Report Ready",
-                message = "Your March 2026 financial report is ready to view",
-                timeAgo = "2 days ago", isRead = true),
-            AppNotification(type = NotificationType.SYSTEM_ERROR,
-                title   = "Sync Failed",
-                message = "Could not sync your M-Pesa transactions. Tap to retry.",
-                timeAgo = "3 days ago", isRead = true),
-        ))
-    }
+    private val _notifications = MutableStateFlow<List<AppNotification>>(emptyList())
+    val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
-    val unread = notifications.filter { !it.isRead }
-    val read   = notifications.filter { it.isRead }
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    fun markAllRead() {
-        notifications = notifications.map { it.copy(isRead = true) }
-    }
+    init { loadNotifications() }
 
-    fun dismiss(id: String) {
-        notifications = notifications.filter { it.id != id }
+    fun loadNotifications() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            runCatching { api.getNotifications() }
+                .getOrNull()?.body()?.let { list ->
+                    _notifications.value = list.map { n ->
+                        AppNotification(
+                            id      = n.id,
+                            type    = when {
+                                n.type.contains("payment", true) -> NotificationType.PAYMENT
+                                n.type.contains("budget",  true) -> NotificationType.BUDGET_EXCEEDED
+                                n.type.contains("goal",    true) -> NotificationType.GOAL_ACHIEVED
+                                n.type.contains("saving",  true) -> NotificationType.SAVINGS_NUDGE
+                                n.type.contains("report",  true) -> NotificationType.REPORT_READY
+                                else                              -> NotificationType.SYSTEM_ERROR
+                            },
+                            title   = n.title,
+                            message = n.message,
+                            timeAgo = n.createdAt.take(10),
+                            isRead  = n.read,
+                        )
+                    }
+                }
+            _isLoading.value = false
+        }
     }
 
     fun markRead(id: String) {
-        notifications = notifications.map {
-            if (it.id == id) it.copy(isRead = true) else it
+        viewModelScope.launch {
+            runCatching { api.markRead(id) }
+            _notifications.update { list ->
+                list.map { if (it.id == id) it.copy(isRead = true) else it }
+            }
         }
     }
+
+    fun markAllRead() {
+        viewModelScope.launch {
+            runCatching { api.markAllRead() }
+            _notifications.update { list -> list.map { it.copy(isRead = true) } }
+        }
+    }
+
+    fun dismiss(id: String) {
+        _notifications.update { list -> list.filter { it.id != id } }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationsScreen(
+    navController: NavHostController,
+    viewModel    : NotificationViewModel = hiltViewModel(),
+) {
+    val primary       = MaterialTheme.colorScheme.primary
+    val notifications by viewModel.notifications.collectAsStateWithLifecycle()
+    val isLoading     by viewModel.isLoading.collectAsStateWithLifecycle()
+    val unread        = notifications.filter { !it.isRead }
+    val read          = notifications.filter { it.isRead }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Notifications", fontFamily = SoraFontFamily,
-                    fontWeight = FontWeight.SemiBold, fontSize = 20.sp) },
+                title = {
+                    Text("Notifications", fontFamily = SoraFontFamily,
+                        fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back",
@@ -107,7 +136,7 @@ fun NotificationsScreen(navController: NavHostController) {
                 },
                 actions = {
                     if (unread.isNotEmpty()) {
-                        TextButton(onClick = { markAllRead() }) {
+                        TextButton(onClick = { viewModel.markAllRead() }) {
                             Text("Mark all read", color = primary,
                                 fontFamily = DmSansFontFamily, fontSize = 13.sp)
                         }
@@ -118,70 +147,56 @@ fun NotificationsScreen(navController: NavHostController) {
             )
         },
     ) { padding ->
-        if (notifications.isEmpty()) {
-            EmptyNotificationsState()
-        } else {
-            LazyColumn(
-                modifier            = Modifier.fillMaxSize().padding(padding),
-                contentPadding      = PaddingValues(bottom = 80.dp),
-            ) {
-                // Unread section
-                if (unread.isNotEmpty()) {
-                    itemsIndexed(unread, key = { _, n -> n.id }) { index, notification ->
-                        var visible by remember { mutableStateOf(false) }
-                        LaunchedEffect(Unit) {
-                            delay(index * 50L)
-                            visible = true
+        when {
+            isLoading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = primary)
+                }
+            }
+            notifications.isEmpty() -> EmptyNotificationsState()
+            else -> {
+                LazyColumn(
+                    modifier       = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                ) {
+                    if (unread.isNotEmpty()) {
+                        itemsIndexed(unread, key = { _, n -> n.id }) { index, notification ->
+                            var visible by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) { delay(index * 50L); visible = true }
+                            AnimatedVisibility(visible = visible, enter = fadeIn(tween(300)) + slideInVertically { 20 }) {
+                                NotificationItem(
+                                    notification = notification,
+                                    onDismiss    = { viewModel.dismiss(notification.id) },
+                                    onTap        = { viewModel.markRead(notification.id) },
+                                )
+                            }
                         }
-                        AnimatedVisibility(
-                            visible = visible,
-                            enter   = fadeIn(tween(300)) + slideInVertically { 20 },
-                        ) {
+                    }
+
+                    if (unread.isNotEmpty() && read.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Divider(Modifier.weight(1f), color = MaterialTheme.akibaColors.glassBorder)
+                                Text("  Earlier  ", fontFamily = DmSansFontFamily, fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                                Divider(Modifier.weight(1f), color = MaterialTheme.akibaColors.glassBorder)
+                            }
+                        }
+                    }
+
+                    itemsIndexed(read, key = { _, n -> n.id }) { index, notification ->
+                        var visible by remember { mutableStateOf(false) }
+                        LaunchedEffect(Unit) { delay(index * 50L); visible = true }
+                        AnimatedVisibility(visible = visible, enter = fadeIn(tween(300)) + slideInVertically { 20 }) {
                             NotificationItem(
                                 notification = notification,
-                                onDismiss    = { dismiss(notification.id) },
-                                onTap        = { markRead(notification.id) },
+                                onDismiss    = { viewModel.dismiss(notification.id) },
+                                onTap        = {},
                             )
                         }
-                    }
-                }
-
-                // Divider between unread and read
-                if (unread.isNotEmpty() && read.isNotEmpty()) {
-                    item {
-                        Row(
-                            modifier              = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment     = Alignment.CenterVertically,
-                        ) {
-                            Divider(modifier = Modifier.weight(1f),
-                                color = MaterialTheme.akibaColors.glassBorder)
-                            Text("  Earlier  ", fontFamily = DmSansFontFamily,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                            Divider(modifier = Modifier.weight(1f),
-                                color = MaterialTheme.akibaColors.glassBorder)
-                        }
-                    }
-                }
-
-                // Read section
-                itemsIndexed(read, key = { _, n -> n.id }) { index, notification ->
-                    var visible by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) {
-                        delay(index * 50L)
-                        visible = true
-                    }
-                    AnimatedVisibility(
-                        visible = visible,
-                        enter   = fadeIn(tween(300)) + slideInVertically { 20 },
-                    ) {
-                        NotificationItem(
-                            notification = notification,
-                            onDismiss    = { dismiss(notification.id) },
-                            onTap        = { },
-                        )
                     }
                 }
             }
@@ -189,7 +204,6 @@ fun NotificationsScreen(navController: NavHostController) {
     }
 }
 
-// ── Notification item ─────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotificationItem(
@@ -213,16 +227,13 @@ private fun NotificationItem(
     }
 
     val bgColor by animateColorAsState(
-        targetValue = if (!notification.isRead)
-            primary.copy(alpha = 0.06f)
-        else Color.Transparent,
-        label = "notifBg",
+        targetValue = if (!notification.isRead) primary.copy(alpha = 0.06f) else Color.Transparent,
+        label       = "notifBg",
     )
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = {
-            if (it == SwipeToDismissBoxValue.EndToStart) { onDismiss(); true }
-            else false
+            if (it == SwipeToDismissBoxValue.EndToStart) { onDismiss(); true } else false
         }
     )
 
@@ -233,40 +244,32 @@ private fun NotificationItem(
                 contentAlignment = Alignment.CenterEnd,
                 modifier         = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(listOf(Color.Transparent, error))
-                    )
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, error)))
                     .padding(end = 20.dp),
             ) {
-                Icon(Icons.Rounded.Delete, null,
-                    tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(Icons.Rounded.Delete, null, tint = Color.White, modifier = Modifier.size(24.dp))
             }
         },
         enableDismissFromStartToEnd = false,
     ) {
         Row(
-            modifier              = Modifier
+            modifier          = Modifier
                 .fillMaxWidth()
                 .background(bgColor)
                 .clickable(onClick = onTap)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment     = Alignment.Top,
+            verticalAlignment = Alignment.Top,
         ) {
-            // Icon circle
             Box(
                 contentAlignment = Alignment.Center,
                 modifier         = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(listOf(iconColor, iconColor.copy(alpha = 0.5f)))
-                    ),
+                    .background(Brush.radialGradient(listOf(iconColor, iconColor.copy(alpha = 0.5f)))),
             ) {
                 Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
-
             Spacer(Modifier.width(12.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = notification.title,
@@ -285,12 +288,9 @@ private fun NotificationItem(
                     color      = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(4.dp))
-                Text(notification.timeAgo, fontFamily = DmSansFontFamily,
-                    fontSize = 11.sp,
+                Text(notification.timeAgo, fontFamily = DmSansFontFamily, fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
             }
-
-            // Unread dot
             if (!notification.isRead) {
                 val dotScale = remember { Animatable(0f) }
                 LaunchedEffect(Unit) {
@@ -307,31 +307,19 @@ private fun NotificationItem(
             }
         }
     }
-
-    Divider(
-        color     = MaterialTheme.akibaColors.glassBorder,
-        thickness = 0.5.dp,
-        modifier  = Modifier.padding(horizontal = 16.dp),
-    )
+    Divider(color = MaterialTheme.akibaColors.glassBorder, thickness = 0.5.dp,
+        modifier = Modifier.padding(horizontal = 16.dp))
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
 @Composable
 private fun EmptyNotificationsState() {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier         = Modifier.fillMaxSize().padding(32.dp),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(32.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Rounded.Notifications, null,
-                tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
                 modifier = Modifier.size(72.dp))
-            Text("All caught up ✓", fontFamily = SoraFontFamily,
-                fontWeight = FontWeight.SemiBold, fontSize = 20.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            Text("All caught up", fontFamily = SoraFontFamily, fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             Text("No new notifications", fontFamily = DmSansFontFamily, fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
         }

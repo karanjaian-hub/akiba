@@ -11,14 +11,6 @@ import java.time.LocalDate;
 import java.time.format.TextStyle;
 import java.util.Locale;
 
-/**
- * FinancialContextService builds a rich system prompt snapshot by
- * calling the transaction-service and budget-service internally.
- *
- * This runs ONCE per chat request, before we call Gemini, so the AI
- * always has the user's live financial picture. We never pass raw DB
- * data to Gemini — only the summarised context below.
- */
 public class FinancialContextService {
 
   private static final Logger log = LoggerFactory.getLogger(FinancialContextService.class);

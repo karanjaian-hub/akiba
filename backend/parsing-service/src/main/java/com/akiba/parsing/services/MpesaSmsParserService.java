@@ -14,7 +14,7 @@ public class MpesaSmsParserService {
 
         Return ONLY a valid JSON array with no markdown, no explanation, no code fences.
         Each object in the array must have these exact fields:
-        - date       (string, format: YYYY-MM-DD, infer year as current if missing)
+        - date       (string, format: YYYY-MM-DDTHH:mm:ss, infer year as current if missing, use 00:00:00 if time not specified)
         - amount     (number, in KES, no commas or currency symbols)
         - type       (string, exactly "DEBIT" or "CREDIT")
         - merchant   (string, the recipient or sender name)

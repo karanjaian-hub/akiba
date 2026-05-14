@@ -5,14 +5,6 @@ import io.vertx.core.Future;
 
 import java.util.List;
 
-/**
- * AiProvider defines the contract every AI backend must fulfil.
- *
- * Why an interface? Because today we use Gemini, but tomorrow we might
- * switch to Claude or any other LLM. All the callers only talk to this
- * interface — swapping the provider requires zero changes in the
- * handlers or services.
- */
 public interface AiProvider {
 
   /**

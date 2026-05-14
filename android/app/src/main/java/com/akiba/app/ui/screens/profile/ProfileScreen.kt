@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.akiba.app.navigation.AkibaBottomBar
 import com.akiba.app.data.repository.AuthRepository
 import com.akiba.app.navigation.Screen
 import com.akiba.app.ui.components.common.*
@@ -122,6 +123,7 @@ fun ProfileScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = { AkibaBottomBar(navController) },
     ) { padding ->
         LazyColumn(
             modifier       = Modifier.fillMaxSize().padding(padding),

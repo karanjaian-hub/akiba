@@ -1,9 +1,5 @@
-networks:
-  akiba-network:
-    driver: bridge
-
 services:
-  # ─── Infrastructure ───────────────────────────────────────────
+  ########  Infrastructure
   postgres:
     image: postgres:16
     environment:
@@ -49,7 +45,8 @@ services:
       retries: 5
     restart: on-failure
 
-  # ─── Application Services ─────────────────────────────────────
+
+  ###### Application Services
   pdf-helper:
     build: ./backend/pdf-helper
     container_name: pdf-helper
@@ -121,7 +118,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8082/transactions/health || exit 1" ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/transactions/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -237,12 +234,11 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8086/budgets/health || exit 1" ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/budgets/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
     restart: on-failure
 
   savings-service:
@@ -295,7 +291,7 @@ services:
         condition: service_healthy
     restart: on-failure
 
-  # ─── API Gateway (depends on all app services) ────────────────
+  ###### API Gateway
   api-gateway:
     build: ./backend/api-gateway
     ports:
@@ -339,318 +335,10 @@ services:
         condition: service_started
     restart: on-failure
 
+####### Networks
+networks:
+  akiba-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
 
-#
-#networks:
-#  akiba-network:
-#    driver: bridge
-#
-#services:
-#  # ─── Infrastructure ───────────────────────────────────────────
-#  postgres:
-#    image: postgres:16
-#    environment:
-#      POSTGRES_DB: akiba_db
-#      POSTGRES_USER: akiba
-#      POSTGRES_PASSWORD: akiba_secret
-#    ports:
-#      - "5432:5432"
-#    networks:
-#      - akiba-network
-#    healthcheck:
-#      test: ["CMD-SHELL", "pg_isready -U akiba -d akiba_db"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#    restart: on-failure
-#
-#  rabbitmq:
-#    image: rabbitmq:3-management
-#    ports:
-#      - "5672:5672"
-#      - "15672:15672"
-#    networks:
-#      - akiba-network
-#    healthcheck:
-#      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#    restart: on-failure
-#
-#  redis:
-#    image: redis:7-alpine
-#    ports:
-#      - "6379:6379"
-#    networks:
-#      - akiba-network
-#    healthcheck:
-#      test: ["CMD", "redis-cli", "ping"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#    restart: on-failure
-#
-#  # ─── Application Services ─────────────────────────────────────
-#  auth-service:
-#    build: ./backend/auth-service
-#    ports:
-#      - "8081:8081"
-#    dns:
-#      - 8.8.8.8
-#      - 8.8.4.4
-#    environment:
-#      SMTP_HOST: ${SMTP_HOST}
-#      SMTP_PORT: ${SMTP_PORT}
-#      SMTP_USERNAME: ${SMTP_USERNAME}
-#      SMTP_PASSWORD: ${SMTP_PASSWORD}
-#      SMTP_FROM: ${SMTP_FROM}
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8081
-#      AT_API_KEY: ${AT_API_KEY}
-#      AT_USERNAME: ${AT_USERNAME}
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  transaction-service:
-#    build: ./backend/transaction-service
-#    ports:
-#      - "8082:8082"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8082
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  parsing-service:
-#    build: ./backend/parsing-service
-#    ports:
-#      - "8083:8083"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8083
-#      GEMINI_API_KEY: ${GEMINI_API_KEY}
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  ai-service:
-#    build: ./backend/ai-service
-#    ports:
-#      - "8084:8084"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8084
-#      GEMINI_API_KEY: ${GEMINI_API_KEY}
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  payment-service:
-#    build: ./backend/payment-service
-#    ports:
-#      - "8085:8085"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8085
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  budget-service:
-#    build: ./backend/budget-service
-#    ports:
-#      - "8086:8086"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8086
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  savings-service:
-#    build: ./backend/savings-service
-#    ports:
-#      - "8087:8087"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8087
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  notification-service:
-#    build: ./backend/notification-service
-#    ports:
-#      - "8088:8088"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8088
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#    restart: on-failure
-#
-#  # ─── API Gateway (depends on all app services) ────────────────
-#  api-gateway:
-#    build: ./backend/api-gateway
-#    ports:
-#      - "8080:8080"
-#    environment:
-#      DB_HOST: postgres
-#      DB_PORT: 5432
-#      DB_NAME: akiba_db
-#      DB_USER: akiba
-#      DB_PASS: akiba_secret
-#      RABBITMQ_HOST: rabbitmq
-#      REDIS_HOST: redis
-#      JWT_SECRET: ${JWT_SECRET}
-#      SERVICE_PORT: 8080
-#    networks:
-#      - akiba-network
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#      auth-service:
-#        condition: service_started
-#      transaction-service:
-#        condition: service_started
-#      parsing-service:
-#        condition: service_started
-#      ai-service:
-#        condition: service_started
-#      payment-service:
-#        condition: service_started
-#      budget-service:
-#        condition: service_started
-#
-#  pdf-helper:
-#    build: ./backend/pdf-helper
-#    container_name: pdf-helper
-#    ports:
-#      - "8099:8099"
-#    networks:
-#      - akiba-network
-#    restart: on-failure
-#    healthcheck:
-#      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
-#      interval: 30s
-#      timeout: 10s
-#      retries: 3

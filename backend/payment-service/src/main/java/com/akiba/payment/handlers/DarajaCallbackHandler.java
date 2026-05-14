@@ -15,7 +15,7 @@ public class DarajaCallbackHandler {
   public void handle(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject();
     if (body == null) {
-      // Always respond 200 to Daraja — if we return non-200, they retry endlessly
+      // Rule.. Always respond 200 to Daraja — if we return non-200, they retry endlessly
       ctx.response().setStatusCode(200).end();
       return;
     }
@@ -29,7 +29,7 @@ public class DarajaCallbackHandler {
       paymentService.processCallback(checkoutId, resultCode, resultDesc)
         .onSuccess(v -> ctx.response().setStatusCode(200).end())
         .onFailure(err -> {
-          // Log but still return 200 — we don't want Daraja to retry
+          // Log but still return 200 — so Daraja doesn't retry
           System.err.println("[payment-service] Callback processing error: " + err.getMessage());
           ctx.response().setStatusCode(200).end();
         });

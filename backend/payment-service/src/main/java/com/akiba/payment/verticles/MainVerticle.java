@@ -1,7 +1,11 @@
 package com.akiba.payment.verticles;
 
 import com.akiba.payment.config.PaymentConfig;
-import com.akiba.payment.handlers.*;
+import com.akiba.payment.handlers.DarajaCallbackHandler;
+import com.akiba.payment.handlers.InitiatePaymentHandler;
+import com.akiba.payment.handlers.PaymentHistoryHandler;
+import com.akiba.payment.handlers.PaymentStatusHandler;
+import com.akiba.payment.handlers.RecipientsHandler;
 import com.akiba.payment.repositories.PaymentRepository;
 import com.akiba.payment.services.DarajaService;
 import com.akiba.payment.services.PaymentService;
@@ -9,23 +13,29 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.jwt.JWTAuth;
+import io.vertx.ext.auth.jwt.JWTAuthOptions;
+import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.JWTAuthHandler;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.redis.client.Redis;
 import io.vertx.sqlclient.Pool;
 
-import java.util.Set;
+import java.util.List;
+import java.util.UUID;
 
 
 public class MainVerticle extends AbstractVerticle {
 
   @Override
   public void start(Promise<Void> startPromise) {
-
+    // Each step is chained — if any fail, startPromise.fail() is called and
+    // Vert.x will refuse to mark this verticle as deployed.
     vertx.deployVerticle(new SchemaVerticle())
       .compose(id -> connectInfrastructure())
       .compose(this::startHttpServer)
@@ -46,7 +56,7 @@ public class MainVerticle extends AbstractVerticle {
       .setPort(5672)
       .setUser("guest")
       .setPassword("guest")
-      .setReconnectAttempts(50)
+      .setReconnectAttempts(10)
       .setReconnectInterval(3000);
 
     RabbitMQClient rabbitMQ = RabbitMQClient.create(vertx, rmqOpts);
@@ -73,12 +83,18 @@ public class MainVerticle extends AbstractVerticle {
 
     InitiatePaymentHandler initiateHandler  = new InitiatePaymentHandler(service, repository);
     DarajaCallbackHandler  callbackHandler  = new DarajaCallbackHandler(service);
-    PaymentStatusHandler   statusHandler    = new PaymentStatusHandler(repository, infra.redis);
+    PaymentHistoryHandler  historyHandler    = new PaymentHistoryHandler(repository);
+    PaymentStatusHandler   statusHandler     = new PaymentStatusHandler(repository, infra.redis);
     RecipientsHandler      recipientsHandler = new RecipientsHandler(repository);
 
     Router router = Router.router(vertx);
 
-    // Global middleware
+    JWTAuth jwtAuth = JWTAuth.create(vertx, new JWTAuthOptions()
+      .addPubSecKey(new PubSecKeyOptions()
+        .setAlgorithm("HS256")
+        .setBuffer(PaymentConfig.jwtSecret())));
+
+    // Cors config
     router.route().handler(CorsHandler.create()
       .addOrigin("*")
       .allowedMethod(io.vertx.core.http.HttpMethod.GET)
@@ -89,38 +105,32 @@ public class MainVerticle extends AbstractVerticle {
 
     router.route().handler(BodyHandler.create());
 
+    // Apply JWT validation to all /payments/* routes.
     router.post("/payments/callback").handler(callbackHandler::handle);
 
-// Auth middleware — applies to all other /payments/* routes
+    router.route("/payments/*").handler(JWTAuthHandler.create(jwtAuth));
+
+    // Extract userId from the validated JWT claims and put it on the context... every handler can read it with ctx.get("userId").
     router.route("/payments/*").handler(ctx -> {
-      String userIdHeader = ctx.request().getHeader("X-User-Id"); // set by API Gateway after JWT validation
-      if (userIdHeader == null || userIdHeader.isBlank()) {
+      String userId = ctx.user().principal().getString("sub");;
+      if (userId == null || userId.isBlank()) {
         ctx.response().setStatusCode(401)
+          .putHeader("Content-Type", "application/json")
           .end(new JsonObject().put("error", "Unauthorized").encode());
         return;
       }
-      ctx.put("userId", userIdHeader);
+      ctx.put("userId", userId);
       ctx.next();
     });
 
-    // Routes
-    router.post("/payments/initiate")            .handler(initiateHandler::handle);
+    // Routes/ endpoints
+    router.post("/payments/initiate")             .handler(initiateHandler::handle);
+    router.get("/payments/history")               .handler(historyHandler::handle);
 
-    // Callback has NO JWT — Safaricom posts here directly
-    router.post("/payments/callback")            .handler(callbackHandler::handle);
+    router.get("/payments/status/:paymentId")     .handler(statusHandler::handle);
+    router.get("/payments/recipients")            .handler(recipientsHandler::handleGet);
+    router.put("/payments/recipients/:id")        .handler(recipientsHandler::handleUpdate);
 
-    router.get("/payments/history")              .handler(ctx -> {
-      // Inner class hack — PaymentHistoryHandler is package-private; use directly here
-      new com.akiba.payment.handlers.PaymentStatusHandler(repository, infra.redis); // placeholder
-      // PLACEHOLDER: wire PaymentHistoryHandler here once it's a top-level public class
-      ctx.response().setStatusCode(501).end(new JsonObject().put("error", "Not yet wired").encode());
-    });
-
-    router.get("/payments/status/:paymentId")    .handler(statusHandler::handle);
-    router.get("/payments/recipients")           .handler(recipientsHandler::handleGet);
-    router.put("/payments/recipients/:id")       .handler(recipientsHandler::handleUpdate);
-
-    // Health endpoint — no auth required. Used by Docker and API Gateway
     router.get("/health").handler(ctx ->
       ctx.response()
         .setStatusCode(200)
@@ -135,7 +145,12 @@ public class MainVerticle extends AbstractVerticle {
     return router;
   }
 
-  // Helper record to pass infrastructure components around
+  private int parseIntParam(List<String> values, int defaultVal) {
+    if (values == null || values.isEmpty()) return defaultVal;
+    try { return Integer.parseInt(values.get(0)); }
+    catch (NumberFormatException e) { return defaultVal; }
+  }
 
+  // Helper record to pass infrastructure components around
   private record InfrastructureComponents(Pool db, Redis redis, RabbitMQClient rabbitMQ) {}
 }

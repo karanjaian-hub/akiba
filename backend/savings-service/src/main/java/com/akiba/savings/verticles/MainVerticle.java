@@ -1,6 +1,7 @@
 package com.akiba.savings.verticles;
 
 import com.akiba.savings.consumers.ContributionConsumer;
+import com.akiba.savings.handlers.JwtAuthHandler;
 import com.akiba.savings.handlers.SavingsHandler;
 import com.akiba.savings.repositories.SavingsRepository;
 import io.vertx.core.Future;
@@ -45,10 +46,19 @@ public class MainVerticle extends VerticleBase {
 
     SavingsHandler handler = new SavingsHandler(repository, redis, rabbitMQ);
 
+    // JWT secret must match what auth-service uses to sign tokens
+    String jwtSecret = config.getString("JWT_SECRET", "change-me-in-production");
+    JwtAuthHandler jwtAuth = new JwtAuthHandler(vertx, jwtSecret);
+
     Router router = Router.router(vertx);
     router.route().handler(BodyHandler.create());
 
+    // Public — no JWT needed
     router.get("/health").handler(handler::healthCheck);
+
+    // Protected — JWT middleware runs first on all /savings/* routes,
+    // then the specific handler runs via ctx.next() inside JwtAuthHandler
+    router.route("/savings/*").handler(jwtAuth::handle);
     router.get("/savings/goals").handler(handler::getGoals);
     router.post("/savings/goals").handler(handler::createGoal);
     router.put("/savings/goals/:id").handler(handler::updateGoal);
@@ -73,7 +83,6 @@ public class MainVerticle extends VerticleBase {
       .setUser(config.getString("DB_USER", "akiba"))
       .setPassword(config.getString("DB_PASS", "akiba_secret"));
 
-    // Vert.x 5: PgPool.pool() removed — use PgBuilder
     return PgBuilder.pool()
       .with(new PoolOptions().setMaxSize(5))
       .connectingTo(connectOptions)

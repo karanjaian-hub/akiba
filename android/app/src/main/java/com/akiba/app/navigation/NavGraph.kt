@@ -43,8 +43,10 @@ fun RootNavGraph(isLoggedIn: Boolean) {
     NavHost(
         navController    = navController,
         startDestination = if (isLoggedIn) "main" else "auth",
-        enterTransition  = { fadeIn(tween(300)) },
-        exitTransition   = { fadeOut(tween(200)) },
+        enterTransition     = { fadeIn(tween(220)) + slideInHorizontally(tween(280)) { it / 10 } },
+        exitTransition      = { fadeOut(tween(180)) + slideOutHorizontally(tween(240)) { -it / 10 } },
+        popEnterTransition  = { fadeIn(tween(220)) + slideInHorizontally(tween(280)) { -it / 10 } },
+        popExitTransition   = { fadeOut(tween(180)) + slideOutHorizontally(tween(240)) { it / 10 } },
     ) {
         authGraph(navController, isLoggedIn)
         mainGraph(navController)
@@ -121,11 +123,11 @@ fun NavGraphBuilder.mainGraph(navController: NavHostController) {
         composable("payment_failed/{reason}",
             arguments = listOf(navArgument("reason") { type = NavType.StringType })
         ) { PaymentFailedScreen(navController, it.arguments?.getString("reason") ?: "Unknown error") }
-        composable(Screen.Goals.route)         { ScreenPlaceholder("Goals")     }
-        composable(Screen.History.route)       { ScreenPlaceholder("History")   }
-        composable(Screen.Profile.route)       { ScreenPlaceholder("Profile")   }
+        composable(Screen.Goals.route)         { GoalsScreen(navController) }
+        composable(Screen.History.route)       { TransactionListScreen(navController) }
+        composable(Screen.Profile.route)       { ProfileScreen(navController) }
         composable(Screen.Budgets.route) { BudgetScreen(navController) }
-        composable(Screen.Savings.route)       { ScreenPlaceholder("Savings")   }
+        composable(Screen.Savings.route)       { GoalsScreen(navController) }
         composable(Screen.AiChat.route) { AiChatScreen(navController) }
         composable(Screen.Notifications.route) { NotificationsScreen(navController) }
         composable("import")        { ImportScreen(navController) }
@@ -138,7 +140,7 @@ fun NavGraphBuilder.mainGraph(navController: NavHostController) {
 
 // ── Bottom navigation bar ─────────────────────────────────────────────────────
 @Composable
-fun AkibaBottomBar(navController: NavHostController) {
+fun AkibaBottomBar(navController: NavHostController, modifier: Modifier = Modifier) {
     val backStack    by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val primary      = MaterialTheme.colorScheme.primary
@@ -151,7 +153,7 @@ fun AkibaBottomBar(navController: NavHostController) {
     NavigationBar(
         containerColor = surface.copy(alpha = 0.95f),
         tonalElevation = 0.dp,
-        modifier       = Modifier.height(68.dp),
+        modifier       = modifier.height(68.dp),
     ) {
         bottomNavItems.forEachIndexed { index, item ->
             val isActive = currentRoute == item.screen.route
@@ -200,6 +202,21 @@ fun AkibaBottomBar(navController: NavHostController) {
                 ),
             )
         }
+    }
+}
+
+// ── Main scaffold with bottom nav ─────────────────────────────────────────────
+@Composable
+fun MainScaffold(
+    navController: NavHostController,
+    content      : @Composable () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        content()
+        AkibaBottomBar(
+            navController = navController,
+            modifier      = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 

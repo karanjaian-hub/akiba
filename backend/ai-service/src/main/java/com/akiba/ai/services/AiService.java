@@ -29,8 +29,6 @@ public class AiService {
 
   private static final Logger log = LoggerFactory.getLogger(AiService.class);
 
-  // Max history messages sent to Gemini per request.
-  // More context = better answers but higher latency + cost.
   private static final int MAX_HISTORY = 20;
 
   private final AiProvider              aiProvider;

@@ -37,7 +37,7 @@ public class DarajaService {
     this.callbackUrl    = PaymentConfig.darajaCallbackUrl();
   }
 
-  // ── Public API
+  // Public API
   public Future<JsonObject> initiateStkPush(String phone, int amount, String accountRef, String description) {
     return getAccessToken()
       .compose(token -> sendStkPushRequest(token, phone, amount, accountRef, description));
@@ -97,7 +97,6 @@ public class DarajaService {
     String token, String phone, int amount, String accountRef, String description) {
 
     String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-    // Daraja requires: Base64(shortcode + passkey + timestamp)
     String password  = Base64.getEncoder().encodeToString(
       (shortcode + passkey + timestamp).getBytes(StandardCharsets.UTF_8)
     );
@@ -108,8 +107,8 @@ public class DarajaService {
       .put("Timestamp",         timestamp)
       .put("TransactionType",   "CustomerPayBillOnline")
       .put("Amount",            amount)
-      .put("PartyA",            phone)         // sender — the user's phone
-      .put("PartyB",            shortcode)     // receiver — our shortcode
+      .put("PartyA",            phone)   // sender — the user's phone
+      .put("PartyB",            shortcode) // receiver — our shortcode
       .put("PhoneNumber",       phone)
       .put("CallBackURL",       callbackUrl)
       .put("AccountReference",  accountRef)
@@ -123,9 +122,6 @@ public class DarajaService {
         int    httpStatus = response.statusCode();
         String rawBody    = response.bodyAsString();
 
-        // Log everything — raw HTTP status + raw body — before we touch the JSON.
-        // WHY: bodyAsJsonObject() returns null silently if the body isn't valid JSON.
-        // Logging first means we always know what Daraja actually sent us.
         System.out.println("[payment-service] Daraja STK response HTTP " + httpStatus + ": " + rawBody);
 
         if (httpStatus != 200) {
@@ -141,8 +137,6 @@ public class DarajaService {
           return Future.failedFuture("Daraja returned non-JSON body: " + rawBody);
         }
 
-        // Daraja sandbox sends ResponseCode as integer 0; production as string "0".
-        // String.valueOf handles both — valueOf(0) = "0", valueOf("0") = "0"
         Object responseCode = resp.getValue("ResponseCode");
         boolean success = "0".equals(String.valueOf(responseCode));
 

@@ -25,7 +25,7 @@ interface TransactionApiService {
     @GET("transactions/summary")
     suspend fun getSummary(): Response<TransactionSummaryDto>
 
-    @GET("transactions/merchants")
+    @GET("transactions/top-merchants")
     suspend fun getTopMerchants(): Response<List<TopMerchantDto>>
 
     @POST("transactions")

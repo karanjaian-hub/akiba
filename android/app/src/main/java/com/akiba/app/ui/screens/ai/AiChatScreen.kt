@@ -34,6 +34,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.akiba.app.BuildConfig
+import com.akiba.app.data.remote.api.AiApiService
+import com.akiba.app.data.remote.api.AiChatRequest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import com.akiba.app.ui.components.common.*
@@ -56,7 +58,10 @@ data class ChatMessage(
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 @HiltViewModel
-class AiChatViewModel @Inject constructor() : ViewModel() {
+class AiChatViewModel @Inject constructor(
+    private val aiApi: AiApiService,
+) : ViewModel() {
+    private var conversationId: String? = null
 
     private val _messages  = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -108,8 +113,7 @@ class AiChatViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    // Calls the Gemini API
-    // In production this should go through your backend ai-service
+    // Routes through backend AI service which handles Groq/AI calls
     private suspend fun callClaudeApi(history: List<Map<String, String>>): String {
         val client = okhttp3.OkHttpClient.Builder()
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -144,7 +148,7 @@ class AiChatViewModel @Inject constructor() : ViewModel() {
         ))
 
         val url = "https://generativelanguage.googleapis.com/v1beta/models/" +
-                  "gemini-2.0-flash:generateContent?key=${BuildConfig.GEMINI_API_KEY}"
+                  "gemini-2.0-flash:generateContent?key=${BuildConfig.GROQ_API_KEY}"
 
         val request = okhttp3.Request.Builder()
             .url(url)

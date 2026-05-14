@@ -23,10 +23,10 @@ public class ParseConsumerVerticle extends VerticleBase {
 
   @Override
   public Future<?> start() {
-    GroqClient gemini = new GroqClient(vertx);
-    smsParser       = new MpesaSmsParserService(gemini);
-    pdfParser       = new BankPdfParserService(vertx, gemini);
-    categoryService = new CategoryService(gemini);
+    GroqClient groqClient = new GroqClient(vertx);
+    smsParser       = new MpesaSmsParserService(groqClient);
+    pdfParser       = new BankPdfParserService(vertx, groqClient);
+    categoryService = new CategoryService(groqClient);
 
     rabbitMQ = RabbitMQClient.create(vertx, buildRabbitMQOptions());
 

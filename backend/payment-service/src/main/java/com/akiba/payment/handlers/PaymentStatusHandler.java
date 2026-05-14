@@ -30,7 +30,7 @@ public class PaymentStatusHandler {
       return;
     }
 
-    // Check DB for authoritative status (Redis only caches the PENDING state)
+    // Check DB for status (Redis only caches the PENDING state)
     repository.findPaymentById(paymentId, userId)
       .onSuccess(payment -> {
         if (payment == null) {

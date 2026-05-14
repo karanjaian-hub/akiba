@@ -25,7 +25,6 @@ public class JwtMiddleware implements Handler<RoutingContext> {
 
     String token = authHeader.substring(7);
 
-    // Vert.x 5: authenticate() requires TokenCredentials, not a raw JsonObject
     jwtAuth.authenticate(new TokenCredentials(token))
       .onSuccess(user -> {
         String userId = user.principal().getString("sub");

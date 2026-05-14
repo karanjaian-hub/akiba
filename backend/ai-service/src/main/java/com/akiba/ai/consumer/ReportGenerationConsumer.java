@@ -1,4 +1,4 @@
-package com.akiba.ai.services;
+package com.akiba.ai.consumer;
 
 import com.akiba.ai.providers.AiProvider;
 import com.akiba.ai.repositories.AiRepository;
@@ -14,17 +14,6 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * ReportGenerationConsumer subscribes to the "report.generate" RabbitMQ queue
- * and produces monthly financial reports using the AI.
- *
- * Vert.x 5 changes:
- *   - basicPublish() no longer accepts RabbitMQPublishOptions as a parameter.
- *     The v5 signature is: basicPublish(exchange, routingKey, body) → Future<Void>.
- *   - RabbitMQClient.start() is now called in MainVerticle before this consumer
- *     is registered — so we can safely call basicConsumer() here without
- *     worrying about connection state.
- */
 public class ReportGenerationConsumer {
 
   private static final Logger log = LoggerFactory.getLogger(ReportGenerationConsumer.class);
@@ -51,10 +40,6 @@ public class ReportGenerationConsumer {
     this.webClient  = webClient;
   }
 
-  /**
-   * Registers the queue consumer.
-   * Called from MainVerticle after rabbitMQ.start() has resolved.
-   */
   public Future<Void> start() {
     return rabbitMQ.queueDeclare(QUEUE_IN, true, false, false)
       .compose(v -> rabbitMQ.queueDeclare(QUEUE_NOTIFY, true, false, false))
@@ -119,13 +104,7 @@ public class ReportGenerationConsumer {
     return aiProvider.complete(systemPrompt, userPrompt, List.of());
   }
 
-  /**
-   * Vert.x 5 basicPublish signature:
-   *   basicPublish(exchange, routingKey, body) → Future<Void>
-   *
-   * The RabbitMQPublishOptions overload was removed in v5. Pass an empty
-   * string for exchange to use the default direct exchange.
-   */
+
   private Future<Void> publishCompletion(UUID userId, UUID reportId, int month, int year) {
     JsonObject notification = new JsonObject()
       .put("type",     "REPORT_READY")

@@ -37,7 +37,7 @@ public class InitiatePaymentHandler {
     String accountRef = body.getString("accountRef");
     String nickname   = body.getString("nickname");
 
-    // ── Input validation — fail early with descriptive errors ──────────────
+    // Input validation
     if (phoneRaw == null || phoneRaw.isBlank()) {
       ctx.response().setStatusCode(400).end(error("'phone' is required"));
       return;
@@ -59,14 +59,15 @@ public class InitiatePaymentHandler {
       return;
     }
 
-    // Normalize phone to Safaricom format: 254XXXXXXXXX
+    // Normalize phone to Safaricom format 254000... and Amount to BigDecimal via .longValue() — which drops any decimal portion
     String phone     = normalizePhone(phoneRaw);
     BigDecimal amount = BigDecimal.valueOf(amountRaw.longValue());
 
-    // ── Orchestrate the payment flow ───────────────────────────────────────
+    // The payment flow
     paymentService.initiatePayment(userId, phone, amount, category, paymentType, accountRef)
       .onSuccess(payment -> {
         // Upsert the recipient in the background — don't block the payment response on this
+        // Upsert means insert if not exists, update if it does
         repository.upsertRecipient(userId, phone, nickname, category, paymentType.name())
           .onFailure(err -> System.err.println(
             "[payment-service] Recipient upsert failed (non-critical): " + err.getMessage()
@@ -78,14 +79,14 @@ public class InitiatePaymentHandler {
           .put("message",   "Check your phone for M-Pesa prompt");
 
         ctx.response()
-          .setStatusCode(202) // 202 Accepted — result comes via callback
+          .setStatusCode(202)
           .putHeader("Content-Type", "application/json")
           .end(response.encode());
       })
       .onFailure(err -> {
         String msg = err.getMessage();
 
-        // Budget exceeded is a user-facing 400, not a server error
+        // Budget exceeded
         if (msg != null && msg.startsWith("BUDGET_EXCEEDED")) {
           ctx.response().setStatusCode(400)
             .putHeader("Content-Type", "application/json")
@@ -109,7 +110,7 @@ public class InitiatePaymentHandler {
     if (phone.startsWith("+254")) return phone.substring(1);
     if (phone.startsWith("0"))   return "254" + phone.substring(1);
     if (phone.startsWith("254")) return phone;
-    return "254" + phone; // assume local format
+    return "254" + phone;
   }
 
   private String error(String message) {

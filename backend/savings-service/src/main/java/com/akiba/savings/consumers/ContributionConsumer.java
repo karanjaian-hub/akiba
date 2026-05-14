@@ -106,7 +106,6 @@ public class ContributionConsumer extends VerticleBase {
   }
 
   private Future<Void> publishAlert(JsonObject alert) {
-    // Vert.x 5: basicPublish(exchange, routingKey, BasicProperties, Buffer)
     return rabbitMQ.basicPublish("", ALERTS_QUEUE, null, Buffer.buffer(alert.encode()))
       .onFailure(err -> log.warn("Failed to publish savings alert: {}", err.getMessage()))
       .mapEmpty();

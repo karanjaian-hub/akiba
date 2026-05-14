@@ -18,11 +18,12 @@ data class TransactionDto(
 )
 
 data class TransactionSummaryDto(
-    val totalBalance : Double,
-    val totalIncome  : Double,
-    val totalExpenses: Double,
-    val totalSaved   : Double,
-    val month        : String,
+    val totalBalance : Double  = 0.0,
+    val totalIncome  : Double? = null,
+    val totalExpenses: Double? = null,
+    val totalSaved   : Double  = 0.0,
+    val month        : String  = "",
+    val topCategories: List<String> = emptyList(),
 )
 
 data class TopMerchantDto(
@@ -35,12 +36,12 @@ data class TopMerchantDto(
 // ── Budgets ───────────────────────────────────────────────────────────────────
 
 data class BudgetDto(
-    val id         : String,
-    val category   : String,
-    val limit      : Double,
-    val spent      : Double,
-    val remaining  : Double,
-    val percentage : Double,
+    val id        : String   = "",
+    val category  : String,
+    val limit     : Double,
+    val spent     : Double,
+    val remaining : Double,
+    val percentage: Double,
 )
 
 data class BudgetOverviewDto(
@@ -53,11 +54,14 @@ data class BudgetOverviewDto(
 data class BudgetCheckResult(
     val canAfford       : Boolean,
     val category        : String,
+    @SerializedName("current_spent")
     val currentSpent    : Double,
     val limit           : Double,
-    @SerializedName("projected_percentage")
+    @SerializedName("percentage_after")
     val projectedPercent: Double,
     val remaining       : Double,
+    @SerializedName("would_exceed")
+    val wouldExceed     : Boolean = false,
 )
 
 // ── Savings ───────────────────────────────────────────────────────────────────

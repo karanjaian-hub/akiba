@@ -86,8 +86,9 @@ fun OtpVerificationScreen(
             is AuthUiState.Success -> {
                 showSuccess = true
                 delay(600)
-                val destination = if (type == "verify") Screen.Dashboard.route
-                                  else Screen.Login.route
+                // After email verification → go to login
+                // After password reset → go to login  
+                val destination = Screen.Login.route
                 navController.navigate(destination) {
                     popUpTo(Screen.OtpVerification.route) { inclusive = true }
                 }
@@ -171,7 +172,7 @@ fun OtpVerificationScreen(
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                     ) {
                         Text(
-                            text       = "📧  Check spam if not received",
+                            text       = "📧  Check your email inbox or spam folder",
                             fontSize   = 12.sp,
                             fontFamily = DmSansFontFamily,
                             color      = MaterialTheme.akibaColors.gold,

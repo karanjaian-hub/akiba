@@ -3,10 +3,6 @@ package com.akiba.payment.models;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * A recipient the user has paid before — displayed in the "recent recipients" chips on the UI.
- * use_count drives the sort order (most used first).
- */
 public class SavedRecipient {
 
   public enum Type { PHONE, TILL, PAYBILL }
@@ -21,8 +17,7 @@ public class SavedRecipient {
   private LocalDateTime lastUsedAt;
   private LocalDateTime createdAt;
 
-  // ── Getters & Setters ──────────────────────────────────────────────────────
-
+  // Getters & Setters
   public UUID getId()                         { return id; }
   public void setId(UUID id)                  { this.id = id; }
 

@@ -25,7 +25,7 @@ android {
             load(FileInputStream(rootProject.file("local.properties")))
         }
         buildConfigField("String", "API_BASE_URL", "\"${props["API_BASE_URL"]}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${props["GEMINI_API_KEY"] ?: ""}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${props["GROQ_API_KEY"] ?: ""}\"")
     }
 
     buildFeatures {

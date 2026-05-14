@@ -7,11 +7,10 @@ import io.vertx.redis.client.RedisAPI;
 
 import java.util.List;
 
-// limits payment requests (Max.. 3 payment requests per user per minute.)
 public class RateLimitMiddleware {
 
   private final RedisAPI redis;
-  private static final int MAX_REQUESTS_PER_MINUTE = 3;
+  private static final int MAX_REQUESTS_PER_MINUTE = 3; // limits payment requests (Max.. 3 payment requests per user per minute.)
 
   public RateLimitMiddleware(RedisAPI redis) {
     this.redis = redis;

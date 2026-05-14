@@ -9,16 +9,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
-/**
- * AiHandler contains one method per HTTP route.
- *
- * Each method follows the same pattern:
- *   1. Extract inputs (user ID from JWT context, body, path params).
- *   2. Call AiService.
- *   3. Map success → 200/201 JSON, failure → appropriate error code.
- *
- * We never write SQL or cache logic here — that's why we have AiService.
- */
 public class AiHandler {
 
   private static final Logger log = LoggerFactory.getLogger(AiHandler.class);
@@ -29,13 +19,6 @@ public class AiHandler {
     this.aiService = aiService;
   }
 
-  /**
-   * POST /ai/chat
-   * Body: { "message": "...", "conversationId": "..." (optional) }
-   *
-   * conversationId absent = start a new conversation.
-   * conversationId present = continue an existing one.
-   */
   public void chat(RoutingContext ctx) {
     UUID   userId = extractUserId(ctx);
     String token  = extractToken(ctx);
@@ -68,10 +51,6 @@ public class AiHandler {
       .onFailure(err -> handleError(ctx, "Chat failed", err));
   }
 
-  /**
-   * GET /ai/conversations
-   * Returns all conversations for the authenticated user.
-   */
   public void getConversations(RoutingContext ctx) {
     UUID userId = extractUserId(ctx);
 
@@ -92,10 +71,7 @@ public class AiHandler {
       .onFailure(err -> handleError(ctx, "Could not fetch conversations", err));
   }
 
-  /**
-   * GET /ai/reports/:month/:year
-   * Returns the AI-generated report for a given month/year.
-   */
+
   public void getReport(RoutingContext ctx) {
     UUID userId = extractUserId(ctx);
 
@@ -130,13 +106,6 @@ public class AiHandler {
       .onFailure(err -> handleError(ctx, "Could not fetch report", err));
   }
 
-  /**
-   * POST /ai/insights
-   * Body: { "question": "..." }
-   *
-   * Quick one-off question — no conversation stored, no history.
-   * Great for the home screen "Ask Akiba" widget.
-   */
   public void quickInsight(RoutingContext ctx) {
     UUID   userId = extractUserId(ctx);
     String token  = extractToken(ctx);
@@ -164,18 +133,10 @@ public class AiHandler {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /**
-   * The API Gateway validates the JWT and forwards the userId as a
-   * header "X-User-Id" to every downstream service.
-   */
   private UUID extractUserId(RoutingContext ctx) {
     return UUID.fromString(ctx.request().getHeader("X-User-Id"));
   }
 
-  /**
-   * We forward the raw Authorization header to internal services so
-   * they can authenticate our internal requests.
-   */
   private String extractToken(RoutingContext ctx) {
     String authHeader = ctx.request().getHeader("Authorization");
     return authHeader != null ? authHeader.replace("Bearer ", "") : "";
