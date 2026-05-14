@@ -125,15 +125,17 @@ public class MainVerticle extends VerticleBase {
   }
 
   private RabbitMQClient buildRabbitMQ() {
-    String rabbitHost = System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq");
-    return RabbitMQClient.create(vertx, new RabbitMQOptions()
-      .setUri((System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
-        + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
-        + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
-        + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
-      )
-      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")).getOrDefault("RABBITMQ_PORT", "5672").equals("5671")));
+    boolean useTls = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
+    String uri = (useTls ? "amqps" : "amqp")
+      + "://" + System.getenv().getOrDefault("RABBITMQ_USER", "guest")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PASS", "guest")
+      + "@" + System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PORT", "5672")
+      + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
+
+    return RabbitMQClient.create(vertx,
+      new RabbitMQOptions()
+        .setUri(uri)
+        .setTrustAll(useTls));
   }
 }

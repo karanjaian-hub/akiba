@@ -31,19 +31,21 @@ public class HttpVerticle extends VerticleBase {
   }
 
   private Future<RabbitMQClient> startRabbitMQ() {
-    RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()
-      .setUri((System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
-        + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
-        + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
-        + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
-      )
-      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")).getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
-      .setAutomaticRecoveryEnabled(true));
+    boolean useTls = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
+    String uri = (useTls ? "amqps" : "amqp")
+      + "://" + System.getenv().getOrDefault("RABBITMQ_USER", "guest")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PASS", "guest")
+      + "@" + System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PORT", "5672")
+      + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
+
+    RabbitMQClient client = RabbitMQClient.create(vertx,
+      new RabbitMQOptions()
+        .setUri(uri)
+        .setTrustAll(useTls)
+        .setAutomaticRecoveryEnabled(true));
 
     return client.start()
-      // Declare with same settings as consumer — durable=true, non-exclusive, non-autodelete
       .compose(v -> client.queueDeclare("parse.statement", true, false, false))
       .map(v -> client);
   }

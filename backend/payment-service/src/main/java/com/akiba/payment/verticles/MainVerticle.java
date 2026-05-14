@@ -51,15 +51,17 @@ public class MainVerticle extends AbstractVerticle {
     Pool  db    = PaymentConfig.createPgPool(vertx);
     Redis redis = PaymentConfig.createRedisClient(vertx);
 
+    boolean useTls = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
+    String uri = (useTls ? "amqps" : "amqp")
+      + "://" + System.getenv().getOrDefault("RABBITMQ_USER", "guest")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PASS", "guest")
+      + "@" + System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PORT", "5672")
+      + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
+
     RabbitMQOptions rmqOpts = new RabbitMQOptions()
-      .setUri((System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
-        + "://" + System.getenv().getOrDefault("RABBITMQ_USER","guest")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PASS","guest")
-        + "@" + System.getenv().getOrDefault("RABBITMQ_HOST","rabbitmq")
-        + ":" + System.getenv().getOrDefault("RABBITMQ_PORT","5672")
-        + "/" + System.getenv().getOrDefault("RABBITMQ_VHOST","/")
-      )
-      .setTrustAll(System.getenv().getOrDefault("RABBITMQ_PORT","5672").equals("5671")).getOrDefault("RABBITMQ_PORT", "5672").equals("5671"))
+      .setUri(uri)
+      .setTrustAll(useTls)
       .setReconnectAttempts(10)
       .setReconnectInterval(3000);
 

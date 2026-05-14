@@ -111,15 +111,19 @@ public class MainVerticle extends VerticleBase {
     return RedisAPI.api(Redis.createClient(vertx, redisOptions));
   }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
-    RabbitMQClient client = RabbitMQClient.create(vertx, new RabbitMQOptions()
-      .setUri((config.getString("RABBITMQ_PORT","5672").equals("5671") ? "amqps" : "amqp")
-        + "://" + config.getString("RABBITMQ_USER","guest")
-        + ":" + config.getString("RABBITMQ_PASS","guest")
-        + "@" + config.getString("RABBITMQ_HOST","rabbitmq")
-        + ":" + config.getString("RABBITMQ_PORT","5672")
-        + "/" + config.getString("RABBITMQ_VHOST","/")
-      )
-      .setTrustAll(config.getString("RABBITMQ_PORT","5672").equals("5671")).equals("5671")));
+    boolean useTls = config.getString("RABBITMQ_PORT", "5672").equals("5671");
+    String uri = (useTls ? "amqps" : "amqp")
+      + "://" + config.getString("RABBITMQ_USER", "guest")
+      + ":" + config.getString("RABBITMQ_PASS", "guest")
+      + "@" + config.getString("RABBITMQ_HOST", "rabbitmq")
+      + ":" + config.getString("RABBITMQ_PORT", "5672")
+      + "/" + config.getString("RABBITMQ_VHOST", "/");
+
+    RabbitMQClient client = RabbitMQClient.create(vertx,
+      new RabbitMQOptions()
+        .setUri(uri)
+        .setTrustAll(useTls));
+
     client.start()
       .onFailure(err -> log.error("RabbitMQ connection failed", err));
     return client;
