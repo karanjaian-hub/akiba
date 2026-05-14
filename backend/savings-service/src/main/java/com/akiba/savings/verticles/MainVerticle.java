@@ -114,23 +114,19 @@ public class MainVerticle extends VerticleBase {
     return RedisAPI.api(Redis.createClient(vertx, redisOptions));
   }
   private RabbitMQClient buildRabbitMQ(JsonObject config) {
-    boolean useTls = config.getString("RABBITMQ_PORT", "5672").equals("5671");
-    String vhost = config.getString("RABBITMQ_VHOST", "/");
-    // The default vhost "/" must be percent-encoded as "%2F" in the URI path
+    boolean useTls = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
+    String vhost = System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
     String encodedVhost = vhost.equals("/") ? "%2F" : vhost;
-
     String uri = (useTls ? "amqps" : "amqp")
-      + "://" + config.getString("RABBITMQ_USER", "guest")
-      + ":" + config.getString("RABBITMQ_PASS", "guest")
-      + "@" + config.getString("RABBITMQ_HOST", "rabbitmq")
-      + ":" + config.getString("RABBITMQ_PORT", "5672")
+      + "://" + System.getenv().getOrDefault("RABBITMQ_USER", "guest")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PASS", "guest")
+      + "@" + System.getenv().getOrDefault("RABBITMQ_HOST", "rabbitmq")
+      + ":" + System.getenv().getOrDefault("RABBITMQ_PORT", "5672")
       + "/" + encodedVhost;
-
     RabbitMQClient client = RabbitMQClient.create(vertx,
       new RabbitMQOptions()
         .setUri(uri)
         .setTrustAll(useTls));
-
     client.start()
       .onFailure(err -> log.error("RabbitMQ connection failed", err));
     return client;
