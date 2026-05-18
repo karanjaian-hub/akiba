@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     id("kotlin-kapt")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.appdistribution")
 }
 
 android {
@@ -20,12 +22,41 @@ android {
         versionCode   = 1
         versionName   = "1.0.0"
 
-        // Read API_BASE_URL from local.properties
         val props = Properties().apply {
             load(FileInputStream(rootProject.file("local.properties")))
         }
         buildConfigField("String", "API_BASE_URL", "\"${props["API_BASE_URL"]}\"")
         buildConfigField("String", "GROQ_API_KEY", "\"${props["GROQ_API_KEY"] ?: ""}\"")
+        packaging {
+            resources {
+                excludes += "META-INF/DEPENDENCIES"
+                excludes += "META-INF/LICENSE"
+                excludes += "META-INF/LICENSE.txt"
+                excludes += "META-INF/NOTICE"
+                excludes += "META-INF/NOTICE.txt"
+            }
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("../akiba-release.jks")
+            storePassword = "Mark@02"
+            keyAlias = "akiba-key"
+            keyPassword = "Mark@02"
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            firebaseAppDistribution {
+                releaseNotes = "Latest Akiba build"
+                groups = "testers"
+            }
+        }
     }
 
     buildFeatures {
@@ -34,17 +65,17 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "21"
     }
 }
 
 dependencies {
-    // ── Compose BOM — pins all Compose versions in one shot ───────────────
+    implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
     val bom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(bom)
     implementation("androidx.compose.ui:ui")
@@ -52,48 +83,23 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
-
-    // ── Core ──────────────────────────────────────────────────────────────
     implementation("androidx.activity:activity-compose:1.9.3")
-
-    // ── Navigation ────────────────────────────────────────────────────────
     implementation("androidx.navigation:navigation-compose:${libs.versions.navigation.get()}")
-
-    // ── Lifecycle + ViewModel ─────────────────────────────────────────────
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:${libs.versions.lifecycle.get()}")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
-
-    // ── Hilt — dependency injection ───────────────────────────────────────
     implementation("com.google.dagger:hilt-android:2.52")
     kapt("com.google.dagger:hilt-android-compiler:2.52")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-    // ── Networking ────────────────────────────────────────────────────────
     implementation("com.squareup.retrofit2:retrofit:${libs.versions.retrofit.get()}")
     implementation("com.squareup.retrofit2:converter-gson:${libs.versions.retrofit.get()}")
     implementation("com.squareup.okhttp3:logging-interceptor:${libs.versions.okhttp.get()}")
-
-    // ── Coroutines ────────────────────────────────────────────────────────
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:${libs.versions.coroutines.get()}")
-
-    // ── DataStore — replaces SharedPreferences ────────────────────────────
     implementation("androidx.datastore:datastore-preferences:${libs.versions.datastore.get()}")
-
-    // ── Image loading ─────────────────────────────────────────────────────
     implementation("io.coil-kt:coil-compose:${libs.versions.coil.get()}")
-
-    // ── Charts ────────────────────────────────────────────────────────────
     implementation("com.patrykandpatrick.vico:compose-m3:${libs.versions.vico.get()}")
-
-    // ── Biometric auth ────────────────────────────────────────────────────
     implementation("androidx.biometric:biometric:${libs.versions.biometric.get()}")
-
-    // ── Splash screen ─────────────────────────────────────────────────────
     implementation("androidx.core:core-splashscreen:${libs.versions.splashscreen.get()}")
-
-    // ── System UI (status/nav bar color control) ──────────────────────────
     implementation("com.google.accompanist:accompanist-systemuicontroller:${libs.versions.accompanist.get()}")
-
-    // ── Paging 3 — infinite scroll ────────────────────────────────────────
     implementation("androidx.paging:paging-compose:${libs.versions.paging.get()}")
+    implementation("com.google.firebase:firebase-appdistribution-gradle:5.0.0")
 }

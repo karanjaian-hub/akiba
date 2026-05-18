@@ -69,7 +69,7 @@ class DashboardViewModel @Inject constructor(
 
             val summary  = summaryDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body()
             val budget   = budgetDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body()
-            val goals    = goalsDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body() ?: emptyList()
+            val goals    = goalsDeferred.await().getOrNull()?.takeIf { it.isSuccessful }?.body()?.goals ?: emptyList()
 
             // Fetch unread notification count from backend
             val unreadCount = runCatching {

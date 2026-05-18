@@ -1,6 +1,5 @@
 package com.akiba.savings.repositories;
 
-import com.akiba.savings.models.SavingsGoal;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -10,8 +9,6 @@ import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.UUID;
 
 public class SavingsRepository {
 
@@ -23,8 +20,6 @@ public class SavingsRepository {
     this.pool = pool;
   }
 
-  // ── Goals ──────────────────────────────────────────────────────────────────
-
   public Future<JsonArray> getActiveGoals(String userId) {
     String sql = """
       SELECT id, user_id, name, target_amount, current_amount,
@@ -34,7 +29,7 @@ public class SavingsRepository {
        ORDER BY created_at ASC
       """;
     return pool.preparedQuery(sql)
-      .execute(Tuple.of(UUID.fromString(userId)))
+      .execute(Tuple.of(userId))
       .map(this::rowsToJsonArray);
   }
 
@@ -49,24 +44,24 @@ public class SavingsRepository {
        LIMIT 1
       """;
     return pool.preparedQuery(sql)
-      .execute(Tuple.of(UUID.fromString(userId)))
+      .execute(Tuple.of(userId))
       .map(rows -> rows.iterator().hasNext() ? rowToJson(rows.iterator().next()) : null);
   }
 
   public Future<String> createGoal(String userId, JsonObject body) {
     String sql = """
       INSERT INTO savings.goals (user_id, name, target_amount, deadline, icon)
-      VALUES ($1, $2, $3, $4::date, $5)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id
       """;
     return pool.preparedQuery(sql)
       .execute(Tuple.of(
-        UUID.fromString(userId),
+        userId,
         body.getString("name"),
         body.getDouble("targetAmount"),
-        body.getString("deadline"),
+        java.time.LocalDate.parse(body.getString("deadline")),
         body.getString("icon", "🎯")))
-      .map(rows -> rows.iterator().next().getString("id"));
+      .map(rows -> rows.iterator().next().getValue("id").toString());
   }
 
   public Future<Void> updateGoal(String goalId, String userId, JsonObject updates) {
@@ -74,7 +69,7 @@ public class SavingsRepository {
       UPDATE savings.goals
          SET name          = COALESCE($1, name),
              target_amount = COALESCE($2, target_amount),
-             deadline      = COALESCE($3::date, deadline),
+             deadline      = COALESCE($3, deadline),
              icon          = COALESCE($4, icon)
        WHERE id = $5 AND user_id = $6
       """;
@@ -82,21 +77,20 @@ public class SavingsRepository {
       .execute(Tuple.of(
         updates.getString("name"),
         updates.getDouble("targetAmount"),
-        updates.getString("deadline"),
+        updates.getString("deadline") != null
+          ? java.time.LocalDate.parse(updates.getString("deadline")) : null,
         updates.getString("icon"),
-        UUID.fromString(goalId),
-        UUID.fromString(userId)))
+        goalId,
+        userId))
       .mapEmpty();
   }
 
   public Future<Void> archiveGoal(String goalId, String userId) {
     String sql = "UPDATE savings.goals SET status = 'ARCHIVED' WHERE id = $1 AND user_id = $2";
     return pool.preparedQuery(sql)
-      .execute(Tuple.of(UUID.fromString(goalId), UUID.fromString(userId)))
+      .execute(Tuple.of(goalId, userId))
       .mapEmpty();
   }
-
-  // ── Contributions ─────────────────────────────────────────────────────────
 
   public Future<Void> addContribution(String goalId, String userId, double amount,
                                       String transactionId, String note) {
@@ -108,11 +102,9 @@ public class SavingsRepository {
       UPDATE savings.goals SET current_amount = current_amount + $1
        WHERE id = $2 AND user_id = $3
       """;
-    UUID goalUuid = UUID.fromString(goalId);
-    UUID userUuid = UUID.fromString(userId);
     return pool.preparedQuery(insertSql)
-      .execute(Tuple.of(goalUuid, userUuid, amount, transactionId, note))
-      .compose(v -> pool.preparedQuery(updateSql).execute(Tuple.of(amount, goalUuid, userUuid)))
+      .execute(Tuple.of(goalId, userId, amount, transactionId, note))
+      .compose(v -> pool.preparedQuery(updateSql).execute(Tuple.of(amount, goalId, userId)))
       .mapEmpty();
   }
 
@@ -124,7 +116,7 @@ public class SavingsRepository {
        WHERE id = $1 AND user_id = $2
       """;
     return pool.preparedQuery(sql)
-      .execute(Tuple.of(UUID.fromString(goalId), UUID.fromString(userId)))
+      .execute(Tuple.of(goalId, userId))
       .map(rows -> rows.iterator().hasNext() ? rowToJson(rows.iterator().next()) : null);
   }
 
@@ -137,11 +129,9 @@ public class SavingsRepository {
        ORDER BY c.created_at DESC
       """;
     return pool.preparedQuery(sql)
-      .execute(Tuple.of(UUID.fromString(goalId), UUID.fromString(userId)))
+      .execute(Tuple.of(goalId, userId))
       .map(this::rowsToJsonArray);
   }
-
-  // ── Row mapping ───────────────────────────────────────────────────────────
 
   private JsonArray rowsToJsonArray(RowSet<Row> rows) {
     JsonArray result = new JsonArray();
@@ -149,11 +139,24 @@ public class SavingsRepository {
     return result;
   }
 
+  /**
+   * Converts a DB row to JsonObject preserving correct types.
+   * Numeric columns (DECIMAL, NUMERIC) come back as Number — keep them as doubles.
+   * Everything else is converted to String.
+   */
   private JsonObject rowToJson(Row row) {
     JsonObject json = new JsonObject();
     for (int i = 0; i < row.size(); i++) {
       Object value = row.getValue(i);
-      json.put(toCamelCase(row.getColumnName(i)), value != null ? value.toString() : null);
+      String key   = toCamelCase(row.getColumnName(i));
+      if (value == null) {
+        json.putNull(key);
+      } else if (value instanceof Number) {
+        // Preserve numeric types so SavingsGoal.fromJson() can call getDouble() correctly
+        json.put(key, ((Number) value).doubleValue());
+      } else {
+        json.put(key, value.toString());
+      }
     }
     return json;
   }

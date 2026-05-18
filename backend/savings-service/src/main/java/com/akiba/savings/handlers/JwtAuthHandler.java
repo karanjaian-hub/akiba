@@ -2,10 +2,10 @@ package com.akiba.savings.handlers;
 
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.auth.authentication.Credentials;
+import io.vertx.ext.auth.PubSecKeyOptions;
+import io.vertx.ext.auth.authentication.TokenCredentials;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
-import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,14 +14,9 @@ import org.slf4j.LoggerFactory;
  * Validates the Bearer JWT on every protected route.
  *
  * WHY executeBlocking?
- * JWT verification involves:
- *   - Base64 decoding the token
- *   - HMAC-SHA256 or RSA signature verification (CPU-bound crypto)
- *   - String parsing and comparison
- *
- * All of that is blocking/CPU work. Running it on the Vert.x event loop
- * would stall every other request on that thread. executeBlocking() hands
- * it off to a worker thread pool so the event loop stays free.
+ * JWT verification is CPU-bound crypto (HMAC-SHA256).
+ * Running it on the event loop would stall every other request on that thread.
+ * executeBlocking() hands it off to a worker thread pool so the event loop stays free.
  */
 public class JwtAuthHandler {
 
@@ -30,21 +25,18 @@ public class JwtAuthHandler {
   private final JWTAuth jwtAuth;
   private final Vertx   vertx;
 
-  public JwtAuthHandler(Vertx vertx, String jwtSecret) {
+  public JwtAuthHandler(Vertx vertx) {
     this.vertx = vertx;
 
-    // Build a symmetric (HMAC-SHA256) JWT verifier from the shared secret.
-    // If your auth-service issues RS256 tokens, swap this for a PEM public key.
+    // Match auth-service exactly: System.getenv() + HS256 + setBuffer(secret)
+    String secret = System.getenv().getOrDefault("JWT_SECRET", "akiba_dev_secret");
+
     this.jwtAuth = JWTAuth.create(vertx, new JWTAuthOptions()
       .addPubSecKey(new PubSecKeyOptions()
         .setAlgorithm("HS256")
-        .setBuffer(jwtSecret)));
+        .setBuffer(secret)));
   }
 
-  /**
-   * Call this as middleware on every protected route group:
-   *   router.route("/savings/*").handler(jwtAuthHandler::handle);
-   */
   public void handle(RoutingContext ctx) {
     String authHeader = ctx.request().getHeader("Authorization");
 
@@ -53,38 +45,23 @@ public class JwtAuthHandler {
       return;
     }
 
-    String token = authHeader.substring(7); // strip "Bearer "
+    String token = authHeader.substring(7);
 
-    // executeBlocking: runs the crypto verification on a worker thread,
-    // then resumes on the event loop when done — non-blocking for the event loop
+    // executeBlocking: runs crypto on a worker thread, resumes on event loop when done
     vertx.executeBlocking(() -> {
-      // This lambda runs on a worker thread — safe to do CPU-bound work here
-      return verifyToken(token);
+      var result = new java.util.concurrent.CompletableFuture<String>();
+      // Vert.x 5: authenticate() takes TokenCredentials, not JsonObject
+      jwtAuth.authenticate(new TokenCredentials(token))
+        .onSuccess(user -> result.complete(user.subject()))
+        .onFailure(err -> result.completeExceptionally(new Exception(err.getMessage())));
+      return result.get(5, java.util.concurrent.TimeUnit.SECONDS);
     }).onSuccess(userId -> {
-      // Back on the event loop — attach userId to context and continue the chain
       ctx.put("userId", userId);
       ctx.next();
     }).onFailure(err -> {
       log.warn("JWT validation failed: {}", err.getMessage());
       replyUnauthorized(ctx, "Invalid or expired token");
     });
-  }
-
-  /**
-   * Verifies the token and returns the subject (userId).
-   * This runs inside executeBlocking so blocking is safe here.
-   */
-  private String verifyToken(String token) throws Exception {
-    // JWTAuth.authenticate is itself async but we're calling it synchronously
-    // inside executeBlocking — the thread can block here without hurting the event loop
-    var result = new java.util.concurrent.CompletableFuture<String>();
-
-    jwtAuth.authenticate((Credentials) new JsonObject().put("token", token))
-      .onSuccess(user -> result.complete(user.subject()))
-      .onFailure(err -> result.completeExceptionally(new Exception(err.getMessage())));
-
-    // Block this worker thread until authentication completes (fine — it's a worker thread)
-    return result.get(5, java.util.concurrent.TimeUnit.SECONDS);
   }
 
   private void replyUnauthorized(RoutingContext ctx, String message) {

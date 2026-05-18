@@ -56,7 +56,7 @@ class SavingsViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             runCatching { api.getGoals() }
-                .getOrNull()?.body()?.let { _goals.value = it }
+                .getOrNull()?.body()?.let { _goals.value = it.goals }
             _isLoading.value = false
         }
     }

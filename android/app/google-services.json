@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "554936173684",
+    "project_id": "gen-lang-client-0702142717",
+    "storage_bucket": "gen-lang-client-0702142717.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:554936173684:android:95747380a1f59c619d7d21",
+        "android_client_info": {
+          "package_name": "com.akiba.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_JtccAGzRejU9_cDHdDHzyeYRWjTWWoE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

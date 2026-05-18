@@ -1,6 +1,7 @@
 package com.akiba.app.data.remote.api
 
 import com.akiba.app.data.remote.dto.SavingsGoalDto
+import com.akiba.app.data.remote.dto.GoalsResponse
 import com.akiba.app.data.remote.dto.ContributionDto
 import retrofit2.Response
 import retrofit2.http.*
@@ -8,7 +9,7 @@ import retrofit2.http.*
 interface SavingsApiService {
 
     @GET("savings/goals")
-    suspend fun getGoals(): Response<List<SavingsGoalDto>>
+    suspend fun getGoals(): Response<GoalsResponse>
 
     @POST("savings/goals")
     suspend fun createGoal(@Body request: Map<String, Any>): Response<SavingsGoalDto>

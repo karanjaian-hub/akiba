@@ -36,12 +36,12 @@ data class TopMerchantDto(
 // ── Budgets ───────────────────────────────────────────────────────────────────
 
 data class BudgetDto(
-    val id        : String   = "",
+    val id        : String  = "",
     val category  : String,
-    val limit     : Double,
-    val spent     : Double,
-    val remaining : Double,
-    val percentage: Double,
+    val limit     : Double  = 0.0,
+    val spent     : Double  = 0.0,
+    val remaining : Double  = 0.0,
+    val percentage: Double  = 0.0,
 )
 
 data class BudgetOverviewDto(
@@ -64,19 +64,29 @@ data class BudgetCheckResult(
     val wouldExceed     : Boolean = false,
 )
 
+data class GoalsResponse(
+    val goals: List<SavingsGoalDto> = emptyList(),
+)
+
 // ── Savings ───────────────────────────────────────────────────────────────────
 
 data class SavingsGoalDto(
-    val id           : String,
-    val name         : String,
-    val emoji        : String,
-    val targetAmount : Double,
-    val savedAmount  : Double,
-    val deadline     : String?,
-    val status       : String,  // "on_track", "behind", "completed"
-    val percentage   : Double,
-    val daysRemaining: Int?,
-    val weeklyTarget : Double?,
+    val id                    : String,
+    val name                  : String,
+    @com.google.gson.annotations.SerializedName("icon")
+    val emoji                 : String  = "💰",
+    @com.google.gson.annotations.SerializedName("targetAmount")
+    val targetAmount          : Double,
+    @com.google.gson.annotations.SerializedName("currentAmount")
+    val savedAmount           : Double  = 0.0,
+    val deadline              : String? = null,
+    val status                : String  = "ACTIVE",
+    @com.google.gson.annotations.SerializedName("percentComplete")
+    val percentage            : Double  = 0.0,
+    val daysRemaining         : Int?    = null,
+    @com.google.gson.annotations.SerializedName("requiredWeeklySaving")
+    val weeklyTarget          : Double? = null,
+    val isOnTrack             : Boolean = true,
 )
 
 data class ContributionDto(
