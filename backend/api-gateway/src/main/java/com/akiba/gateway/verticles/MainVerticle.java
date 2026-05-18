@@ -59,7 +59,8 @@ public class MainVerticle extends VerticleBase {
         redis = RedisAPI.api(conn);
         jwtAuth = createJwtAuth();
         httpClient = vertx.createHttpClient(new HttpClientOptions()
-          .setConnectTimeout(5000));
+          .setConnectTimeout(10000)
+          .setSsl(false));
         System.out.println("[ApiGateway] ✅ Redis connected");
         return Future.succeededFuture();
       });
@@ -91,12 +92,19 @@ public class MainVerticle extends VerticleBase {
 
     router.get("/health").handler(this::handleHealth);
 
-    // Public
+    // Public auth routes
     router.post("/auth/register").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/login").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
     router.post("/auth/refresh").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/verify-phone").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/verify-email").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/forgot-password").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
+    router.post("/auth/reset-password").handler(ctx -> proxyTo(ctx, "auth-service", 8081));
 
-    // Protected
+    // Daraja callback (no JWT)
+    router.post("/payments/callback").handler(ctx -> proxyTo(ctx, "payment-service", 8085));
+
+    // Protected routes
     router.route("/auth/*")
       .handler(jwtMiddleware::handle)
       .handler(ctx -> proxyTo(ctx, "auth-service", 8081));
@@ -133,19 +141,34 @@ public class MainVerticle extends VerticleBase {
     return router;
   }
 
+  private String serviceUrl(String name, int defaultPort) {
+    String envKey = name.toUpperCase().replace("-", "_") + "_URL";
+    String url = System.getenv(envKey);
+    if (url != null && !url.isEmpty()) {
+      return url;
+    }
+    return "http://" + name + ":" + defaultPort;
+  }
+
   private void proxyTo(RoutingContext ctx, String service, int port) {
     long startTime = System.currentTimeMillis();
-    String method  = ctx.request().method().name();
-    String path    = ctx.request().uri();
-    String userId  = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
+    String path   = ctx.request().uri();
+    String userId = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
 
-    httpClient.request(ctx.request().method(), port, service, path)
+    String baseUrl  = serviceUrl(service, port);
+    boolean useSSL  = baseUrl.startsWith("https");
+    int targetPort  = useSSL ? 443 : port;
+    String host     = baseUrl
+      .replace("https://", "")
+      .replace("http://", "")
+      .split("/")[0];
+
+    httpClient.request(ctx.request().method(), targetPort, host, path)
       .compose(req -> {
+        req.ssl(useSSL);
         ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
         req.putHeader("X-User-Id",   userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
-
-        // ── FIX: safely handle null body for GET/DELETE requests ─────────
         Buffer body = ctx.body().buffer();
         if (body != null && body.length() > 0) {
           return req.send(body);
@@ -156,12 +179,10 @@ public class MainVerticle extends VerticleBase {
       .onSuccess(upstreamRes -> {
         long ms = System.currentTimeMillis() - startTime;
         System.out.printf("[ApiGateway] %s %s → %s (%dms) userId=%s%n",
-          method, path, service, ms, userId);
-
+          ctx.request().method().name(), path, service, ms, userId);
         ctx.response().setStatusCode(upstreamRes.statusCode());
         upstreamRes.headers().forEach(h ->
           ctx.response().putHeader(h.getKey(), h.getValue()));
-
         upstreamRes.body()
           .onSuccess(respBody -> {
             if (respBody != null && respBody.length() > 0) {
@@ -170,10 +191,7 @@ public class MainVerticle extends VerticleBase {
               ctx.response().end();
             }
           })
-          .onFailure(err -> {
-            System.err.println("[ApiGateway] ⚠️ Could not read response body: " + err.getMessage());
-            ctx.response().end();
-          });
+          .onFailure(err -> ctx.response().end());
       })
       .onFailure(err -> {
         System.err.println("[ApiGateway] ❌ Proxy failed → " + service + ": " + err.getMessage());
