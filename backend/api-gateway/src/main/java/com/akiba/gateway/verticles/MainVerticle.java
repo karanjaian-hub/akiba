@@ -24,7 +24,6 @@ public class MainVerticle extends VerticleBase {
 
   private RedisAPI redis;
   private JWTAuth jwtAuth;
-  private HttpClient httpClient;
 
   @Override
   public Future<?> start() {
@@ -58,9 +57,6 @@ public class MainVerticle extends VerticleBase {
       .compose(conn -> {
         redis = RedisAPI.api(conn);
         jwtAuth = createJwtAuth();
-        httpClient = vertx.createHttpClient(new HttpClientOptions()
-          .setConnectTimeout(10000)
-          .setSsl(false));
         System.out.println("[ApiGateway] ✅ Redis connected");
         return Future.succeededFuture();
       });
@@ -155,17 +151,23 @@ public class MainVerticle extends VerticleBase {
     String path   = ctx.request().uri();
     String userId = ctx.get("userId") != null ? ctx.get("userId") : "anonymous";
 
-    String baseUrl  = serviceUrl(service, port);
-    boolean useSSL  = baseUrl.startsWith("https");
-    int targetPort  = useSSL ? 443 : port;
-    String host     = baseUrl
+    String baseUrl = serviceUrl(service, port);
+    boolean useSSL = baseUrl.startsWith("https");
+    int targetPort = useSSL ? 443 : port;
+    String host    = baseUrl
       .replace("https://", "")
       .replace("http://", "")
       .split("/")[0];
 
-    httpClient.request(ctx.request().method(), targetPort, host, path)
+    HttpClientOptions opts = new HttpClientOptions()
+      .setConnectTimeout(10000)
+      .setSsl(useSSL)
+      .setTrustAll(useSSL);
+
+    HttpClient client = vertx.createHttpClient(opts);
+
+    client.request(ctx.request().method(), targetPort, host, path)
       .compose(req -> {
-        req.ssl(useSSL);
         ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
         req.putHeader("X-User-Id",   userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
@@ -199,7 +201,8 @@ public class MainVerticle extends VerticleBase {
           .setStatusCode(502)
           .putHeader("Content-Type", "application/json")
           .end(new JsonObject().put("error", "Service unavailable").encode());
-      });
+      })
+      .eventually(() -> client.close());
   }
 
   private void handleHealth(RoutingContext ctx) {
@@ -226,8 +229,7 @@ public class MainVerticle extends VerticleBase {
 
   @Override
   public Future<?> stop() throws Exception {
-    if (httpClient != null) httpClient.close();
-    System.out.println("[ApiGateway] 🛑 Stopped");
+    System.out.println("[ApiGateway] ✅ Stopped");
     return super.stop();
   }
 }
