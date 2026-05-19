@@ -27,15 +27,16 @@ public class MainVerticle extends VerticleBase {
 
   @Override
   public Future<?> start() {
-    Pool           pool     = buildPool();
-    RedisAPI       redis    = buildRedis();
-    RabbitMQClient rabbitMQ = buildRabbitMQ();
-
+    Pool pool = buildPool();
+    RedisAPI redis = buildRedis();
     SavingsRepository repository = new SavingsRepository(pool);
 
-    return vertx.deployVerticle(new SchemaVerticle(pool))
-      .compose(v -> vertx.deployVerticle(new ContributionConsumer(rabbitMQ, repository, redis)))
-      .compose(v -> startHttpServer(repository, redis, rabbitMQ));
+    return buildRabbitMQ()
+      .compose(rabbitMQ ->
+        vertx.deployVerticle(new SchemaVerticle(pool))
+          .compose(v -> vertx.deployVerticle(new ContributionConsumer(rabbitMQ, repository, redis)))
+          .compose(v -> startHttpServer(repository, redis, rabbitMQ))
+      );
   }
 
   private Future<Void> startHttpServer(
@@ -109,7 +110,7 @@ public class MainVerticle extends VerticleBase {
     return RedisAPI.api(Redis.createClient(vertx, redisOptions));
   }
 
-  private RabbitMQClient buildRabbitMQ() {
+  private Future<RabbitMQClient> buildRabbitMQ() {
     boolean useTls      = System.getenv().getOrDefault("RABBITMQ_PORT", "5672").equals("5671");
     String vhost        = System.getenv().getOrDefault("RABBITMQ_VHOST", "/");
     String encodedVhost = vhost.equals("/") ? "%2F" : vhost;
@@ -123,8 +124,7 @@ public class MainVerticle extends VerticleBase {
 
     RabbitMQClient client = RabbitMQClient.create(vertx,
       new RabbitMQOptions().setUri(uri).setTrustAll(useTls));
-    client.start()
-      .onFailure(err -> log.error("RabbitMQ connection failed", err));
-    return client;
+
+    return client.start().map(v -> client);
   }
 }
