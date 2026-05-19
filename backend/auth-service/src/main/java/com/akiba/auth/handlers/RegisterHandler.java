@@ -56,14 +56,19 @@ public class RegisterHandler {
 
     saveUser(userId, fullName, email, normalizedPhone, passwordHash)
       .compose(v -> storeOtpInRedis(userId, otp))
-      .compose(v -> mailService.sendVerificationOtp(email, fullName, otp))
-      .onSuccess(v -> ctx.response()
-        .setStatusCode(201)
-        .putHeader("Content-Type", "application/json")
-        .end(new JsonObject()
-          .put("message", "Registration successful. Please check your email to verify your account.")
-          .put("userId", userId)
-          .encode()))
+      .onSuccess(v -> {
+        // Send email in background — don't block registration success
+        mailService.sendVerificationOtp(email, fullName, otp)
+          .onFailure(err -> System.err.println("[RegisterHandler] ⚠️ Email failed but user registered: " + err.getMessage()));
+
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Registration successful. Please check your email to verify your account.")
+            .put("userId", userId)
+            .encode());
+      })
       .onFailure(err -> {
         err.printStackTrace();
         System.err.println("[RegisterHandler] ❌ " + err.getClass().getSimpleName() + ": " + err.getMessage());

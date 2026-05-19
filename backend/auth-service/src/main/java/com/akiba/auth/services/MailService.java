@@ -12,41 +12,43 @@ public class MailService {
   private final WebClient webClient;
   private final String apiKey;
   private final String from;
+  private final String fromName;
 
   public MailService(Vertx vertx) {
-    this.apiKey = System.getenv().getOrDefault("RESEND_API_KEY", "");
-    this.from   = System.getenv().getOrDefault("SMTP_FROM", "Akiba <onboarding@resend.dev>");
+    this.apiKey   = System.getenv().getOrDefault("BREVO_API_KEY", "");
+    this.from     = System.getenv().getOrDefault("SMTP_FROM", "karanjaian420@gmail.com");
+    this.fromName = "Akiba";
 
     this.webClient = WebClient.create(vertx, new WebClientOptions()
       .setSsl(true)
       .setTrustAll(true)
-      .setDefaultHost("api.resend.com")
+      .setDefaultHost("api.brevo.com")
       .setDefaultPort(443));
   }
 
   public Future<Void> sendVerificationOtp(String toEmail, String fullName, String otp) {
     JsonObject body = new JsonObject()
-      .put("from", from)
-      .put("to", new JsonArray().add(toEmail))
+      .put("sender", new JsonObject().put("name", fromName).put("email", from))
+      .put("to", new JsonArray().add(new JsonObject().put("email", toEmail).put("name", fullName)))
       .put("subject", "Verify your Akiba account")
-      .put("html", verificationOtpHtml(fullName, otp));
+      .put("htmlContent", verificationOtpHtml(fullName, otp));
 
     return send(body, toEmail, "Verification OTP");
   }
 
   public Future<Void> sendPasswordResetOtp(String toEmail, String fullName, String otp) {
     JsonObject body = new JsonObject()
-      .put("from", from)
-      .put("to", new JsonArray().add(toEmail))
+      .put("sender", new JsonObject().put("name", fromName).put("email", from))
+      .put("to", new JsonArray().add(new JsonObject().put("email", toEmail).put("name", fullName)))
       .put("subject", "Akiba Password Reset Code")
-      .put("html", resetOtpHtml(fullName, otp));
+      .put("htmlContent", resetOtpHtml(fullName, otp));
 
     return send(body, toEmail, "Password Reset OTP");
   }
 
   private Future<Void> send(JsonObject body, String toEmail, String type) {
-    return webClient.post("/emails")
-      .putHeader("Authorization", "Bearer " + apiKey)
+    return webClient.post("/v3/smtp/email")
+      .putHeader("api-key", apiKey)
       .putHeader("Content-Type", "application/json")
       .sendJsonObject(body)
       .compose(response -> {
