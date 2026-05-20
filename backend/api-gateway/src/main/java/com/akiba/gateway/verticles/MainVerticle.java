@@ -164,7 +164,8 @@ public class MainVerticle extends VerticleBase {
     }
 
     HttpClientOptions opts = new HttpClientOptions()
-      .setConnectTimeout(10000)
+      .setConnectTimeout(60000)
+      .setIdleTimeout(60)
       .setSsl(useSSL)
       .setTrustAll(useSSL);
 
