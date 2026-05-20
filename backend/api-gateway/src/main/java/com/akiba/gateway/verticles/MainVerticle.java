@@ -173,7 +173,13 @@ public class MainVerticle extends VerticleBase {
 
     client.request(ctx.request().method(), targetPort, host, path)
       .compose(req -> {
-        ctx.request().headers().forEach(h -> req.putHeader(h.getKey(), h.getValue()));
+        ctx.request().headers().forEach(h -> {
+          String key = h.getKey().toLowerCase();
+          if (!key.equals("host") && !key.equals("connection") && !key.equals("transfer-encoding")) {
+            req.putHeader(h.getKey(), h.getValue());
+          }
+        });
+        req.putHeader("Host", host);
         req.putHeader("X-User-Id",   userId);
         req.putHeader("X-User-Role", ctx.get("role") != null ? ctx.get("role") : "");
         Buffer body = ctx.body().buffer();
