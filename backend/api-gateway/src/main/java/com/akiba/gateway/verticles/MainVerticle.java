@@ -154,10 +154,14 @@ public class MainVerticle extends VerticleBase {
     String baseUrl = serviceUrl(service, port);
     boolean useSSL = baseUrl.startsWith("https");
     int targetPort = useSSL ? 443 : port;
-    String host    = baseUrl
+    String hostWithPort = baseUrl
       .replace("https://", "")
       .replace("http://", "")
       .split("/")[0];
+    String host = hostWithPort.contains(":") ? hostWithPort.split(":")[0] : hostWithPort;
+    if (hostWithPort.contains(":")) {
+      targetPort = Integer.parseInt(hostWithPort.split(":")[1]);
+    }
 
     HttpClientOptions opts = new HttpClientOptions()
       .setConnectTimeout(10000)
