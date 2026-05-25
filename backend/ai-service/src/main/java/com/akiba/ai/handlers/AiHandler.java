@@ -131,7 +131,7 @@ public class AiHandler {
       .onFailure(err -> handleError(ctx, "Insight generation failed", err));
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // Helpers
 
   private UUID extractUserId(RoutingContext ctx) {
     return UUID.fromString(ctx.request().getHeader("X-User-Id"));

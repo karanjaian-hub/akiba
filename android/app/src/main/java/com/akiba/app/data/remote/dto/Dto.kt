@@ -10,13 +10,10 @@ data class LoginRequest(
 )
 
 data class RegisterRequest(
-    @SerializedName("full_name")       val fullName      : String,
-    val email                          : String,
-    val phone                          : String,
-    val password                       : String,
-    @SerializedName("income_range")    val incomeRange   : String? = null,
-    @SerializedName("employment_type") val employmentType: String? = null,
-    @SerializedName("primary_goal")    val primaryGoal   : String? = null,
+    val fullName: String,
+    val email   : String,
+    val phone   : String,
+    val password: String,
 )
 
 data class OtpRequest(

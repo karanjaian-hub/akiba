@@ -22,9 +22,7 @@ public class AiCacheService {
     this.redis = redis;
   }
 
-  /**
-   * Checks Redis for a cached response. Returns null on cache miss.
-   */
+ // Checks Redis for a cached response. Returns null on cache miss.
   public Future<String> get(String systemPrompt, String userMessage) {
     String key = buildCacheKey(systemPrompt, userMessage);
 
@@ -35,10 +33,7 @@ public class AiCacheService {
     });
   }
 
-  /**
-   * Stores an AI response in Redis with a 1-hour TTL.
-   * We use SETEX = SET + EXPIRE in one atomic command.
-   */
+// Stores an AI response in Redis with a 1-hour TTL.
   public Future<Void> set(String systemPrompt, String userMessage, String aiResponse) {
     String key = buildCacheKey(systemPrompt, userMessage);
 
@@ -58,7 +53,6 @@ public class AiCacheService {
       }
       return KEY_PREFIX + hex;
     } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is always available in the JDK — this can never happen.
       throw new RuntimeException("SHA-256 not available", e);
     }
   }

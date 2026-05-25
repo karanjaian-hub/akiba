@@ -25,19 +25,6 @@ import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * MainVerticle wires all dependencies and opens the HTTP server.
- *
- * Extends VerticleBase (Vert.x 5). The key difference from AbstractVerticle:
- *   - start() returns Future<?> instead of taking a Promise<Void> parameter.
- *   - We chain everything into one Future pipeline — cleaner and harder to
- *     accidentally forget to complete the promise.
- *
- * Vert.x 5 specific changes applied here:
- *   - PgBuilder.pool() replaces PgPool.pool() (deprecated in v5).
- *   - RabbitMQClient.start() must be awaited before basicConsumer().
- *   - WebClient.create() takes WebClientOptions in v5 for proper config.
- */
 public class MainVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(MainVerticle.class);
@@ -76,9 +63,7 @@ public class MainVerticle extends VerticleBase {
     router.post("/ai/insights")            .handler(handler::quickInsight);
     router.get("/health")                  .handler(ctx -> ctx.response().end("OK"));
 
-    // ── Startup sequence ──────────────────────────────────────────────────
-    // In Vert.x 5, RabbitMQClient must be explicitly started before use.
-    // We chain: start rabbitMQ → register consumer → open HTTP port.
+    // Startup sequence
     return rabbitMQ.start()
       .compose(v -> consumer.start())
       .compose(v -> vertx.createHttpServer()
@@ -97,7 +82,6 @@ public class MainVerticle extends VerticleBase {
       .setSslMode(SslMode.REQUIRE)
       .setSslOptions(new io.vertx.core.net.ClientSSLOptions().setTrustAll(true));
 
-    // PgBuilder.pool() is the Vert.x 5 replacement for PgPool.pool().
     return PgBuilder.pool()
       .connectingTo(connectOptions)
       .with(new PoolOptions().setMaxSize(5))

@@ -32,7 +32,6 @@ public class GroqProvider implements AiProvider {
 
     return webClient
       .postAbs(GROQ_URL)
-      // API key goes in the Authorization header — NOT a query param like Gemini.
       .putHeader("Authorization", "Bearer " + apiKey)
       .putHeader("Content-Type", "application/json")
       .sendJsonObject(body)
@@ -57,7 +56,6 @@ public class GroqProvider implements AiProvider {
 
     // Replay conversation history so Groq remembers prior turns.
     for (Message msg : history) {
-      // Map "model" → "assistant" (Groq uses OpenAI convention, not Gemini's)
       String role = msg.role.equals("model") ? "assistant" : msg.role;
       messages.add(new JsonObject()
         .put("role",    role)
@@ -74,10 +72,7 @@ public class GroqProvider implements AiProvider {
     return new JsonObject()
       .put("model",       MODEL)
       .put("messages",    messages)
-      // max_tokens caps the reply length — 1024 is generous for financial advice.
       .put("max_tokens",  1024)
-      // temperature 0.7: balanced between creative and factual.
-      // 0.0 = very literal/repetitive, 1.0 = very creative/unpredictable.
       .put("temperature", 0.7);
   }
 

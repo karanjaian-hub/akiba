@@ -100,17 +100,11 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _registerState.value = AuthUiState.Loading
 
-            val s1 = step1
-            val s2 = step2
-
             val request = RegisterRequest(
-                fullName       = s1.fullName,
-                email          = s1.email,
-                phone          = s1.phone,
-                password       = s1.password,
-                incomeRange    = s2.incomeRange.ifBlank { null },
-                employmentType = s2.employmentType.ifBlank { null },
-                primaryGoal    = s2.primaryGoal.ifBlank { null },
+                fullName = step1.fullName,
+                email    = step1.email,
+                phone    = step1.phone.trim().replace(" ", "").replace("-", ""),
+                password = step1.password,
             )
 
             _registerState.value = repository.register(request).fold(

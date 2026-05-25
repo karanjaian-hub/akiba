@@ -39,13 +39,11 @@ public class MainVerticle extends VerticleBase {
       .onSuccess(v -> System.out.println("[AuthService] ✅ Started on port " + servicePort()));
   }
 
-  // Deploy the Schema
   private Future<Void> deploySchemaVerticle() {
     return vertx.deployVerticle(new SchemaVerticle()).mapEmpty();
   }
 
-  // connecting with the Postgres Pool
-  private Future<Void> connectPostgres() {
+   private Future<Void> connectPostgres() {
     PgConnectOptions connectOptions = new PgConnectOptions()
       .setHost(System.getenv().getOrDefault("DB_HOST", "localhost"))
       .setPort(Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "5432")))
@@ -64,8 +62,7 @@ public class MainVerticle extends VerticleBase {
     return Future.succeededFuture();
   }
 
-  // Connecting Redis
-  private Future<Void> connectRedis() {
+    private Future<Void> connectRedis() {
     String redisHost     = System.getenv().getOrDefault("REDIS_HOST", "localhost");
     String redisPort     = System.getenv().getOrDefault("REDIS_PORT", "6379");
     String redisPassword = System.getenv().getOrDefault("REDIS_PASSWORD", "");
@@ -191,13 +188,11 @@ public class MainVerticle extends VerticleBase {
   }
 
   // JWT Middleware
-
   private io.vertx.ext.web.handler.JWTAuthHandler jwtMiddleware() {
     return io.vertx.ext.web.handler.JWTAuthHandler.create(jwtAuth);
   }
 
   // Admin-Only Middleware
-
   private Handler<RoutingContext> adminOnly() {
     return ctx -> {
       String role = ctx.user().principal().getString("role");

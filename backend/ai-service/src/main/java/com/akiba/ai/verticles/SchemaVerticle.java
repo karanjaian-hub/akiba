@@ -13,17 +13,7 @@ import io.vertx.core.VerticleBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * SchemaVerticle runs ONCE on startup and ensures the ai.* tables exist.
- *
- * Extends VerticleBase (Vert.x 5) instead of AbstractVerticle.
- * VerticleBase gives us a pre-wired `vertx` instance and a cleaner
- * async start() that returns Future<Void> directly — no Promise to
- * complete manually, so there's less boilerplate and less chance of
- * forgetting startPromise.complete().
- *
- * Every SQL statement uses IF NOT EXISTS — fully idempotent on restart.
- */
+
 public class SchemaVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(SchemaVerticle.class);
@@ -41,11 +31,7 @@ public class SchemaVerticle extends VerticleBase {
       .onFailure(err -> log.error("Schema setup failed: {}", err.getMessage()));
   }
 
-  /**
-   * Expose the pool so AiServiceApplication can pass it to MainVerticle.
-   * We build it here (not in Application) so the pool is always tied to
-   * the same Vert.x event-loop context as the verticle that owns it.
-   */
+
   public Pool getPgPool() {
     return pgPool;
   }
