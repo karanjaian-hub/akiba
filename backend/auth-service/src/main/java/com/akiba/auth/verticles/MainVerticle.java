@@ -170,13 +170,6 @@ public class MainVerticle extends VerticleBase {
         .setStatusCode(501)
         .end("{\"error\":\"Not implemented yet\"}"));
 
-    router.get("/auth/dev/activate/:email").handler(ctx -> {
-      String email = ctx.pathParam("email");
-      pool.preparedQuery("UPDATE auth.users SET status='ACTIVE' WHERE email=$1")
-        .execute(io.vertx.sqlclient.Tuple.of(email))
-        .onSuccess(r -> ctx.response().end("{\"updated\":" + r.rowCount() + "}"))
-        .onFailure(err -> ctx.response().setStatusCode(500).end(err.getMessage()));
-    });
 
     //  Health Check
     router.get("/health").handler(ctx -> ctx.response()

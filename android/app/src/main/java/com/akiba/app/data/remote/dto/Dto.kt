@@ -5,15 +5,15 @@ import com.google.gson.annotations.SerializedName
 // ── Auth requests ─────────────────────────────────────────────────────────────
 
 data class LoginRequest(
-    val email    : String,
-    val password : String,
+    @SerializedName("email")    val email   : String,
+    @SerializedName("password") val password: String,
 )
 
 data class RegisterRequest(
-    val fullName: String,
-    val email   : String,
-    val phone   : String,
-    val password: String,
+    @SerializedName("fullName") val fullName: String,
+    @SerializedName("email")    val email   : String,
+    @SerializedName("phone")    val phone   : String,
+    @SerializedName("password") val password: String,
 )
 
 data class OtpRequest(

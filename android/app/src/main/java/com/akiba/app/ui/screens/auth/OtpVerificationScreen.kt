@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +53,7 @@ fun OtpVerificationScreen(
     val haptic        = LocalHapticFeedback.current
 
     var otpValue      by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
     var resendSeconds by remember { mutableIntStateOf(60) }
     var canResend     by remember { mutableStateOf(false) }
 
@@ -65,6 +68,7 @@ fun OtpVerificationScreen(
 
     // ── Countdown timer ───────────────────────────────────────────────────
     LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
         while (resendSeconds > 0) {
             delay(1000)
             resendSeconds--
@@ -193,7 +197,9 @@ fun OtpVerificationScreen(
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.offset(x = shakeOffset.value.dp),
+                        modifier = Modifier
+                        .offset(x = shakeOffset.value.dp)
+                        .clickable { focusRequester.requestFocus() },
                     ) {
                         repeat(6) { index ->
                             OtpDigitBox(

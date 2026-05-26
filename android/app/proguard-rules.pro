@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Keep all DTO field names for Gson serialization
+-keepclassmembers class com.akiba.app.data.remote.dto.** {
+    <fields>;
+}
+-keep class com.akiba.app.data.remote.dto.** { *; }

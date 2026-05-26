@@ -28,7 +28,6 @@ public class RegisterHandler {
 
   public void handle(RoutingContext ctx) {
 JsonObject body = ctx.body().asJsonObject();
-    System.out.println("[RegisterHandler] 📥 Body received: " + body);
     if (body == null) {
       rejectWith(ctx, 400, "Request body is required");
       return;
